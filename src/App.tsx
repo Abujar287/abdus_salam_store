@@ -64,11 +64,24 @@ interface Product {
   repName: string;
   repPhone: string;
   searchTags: string[];
+  piecesPerPacket?: number;
+  stickPrice?: number;
 }
 
 interface CartItem {
   product: Product;
   quantity: number;
+  isSticks?: boolean;
+}
+
+interface Activity {
+  id: string;
+  type: 'sale' | 'stock_in' | 'new_product' | 'payment';
+  title: string;
+  description: string;
+  amount: number;
+  timestamp: string;
+  date: string;
 }
 
 interface Order {
@@ -95,6 +108,7 @@ interface Customer {
   address: string;
   dueAmount: number;
   lastPurchaseDate: string;
+  createdAt: string; // Added to track new customers correctly
   status: 'clear' | 'pending';
 }
 
@@ -102,13 +116,22 @@ interface DateHistoryRecord {
   date: string;
   totalOrders: number;
   totalSales: number;
-  totalCustomers: number;
+  totalOldCustomers: number;
   totalNewCustomers: number;
+  totalTotalCustomers: number;
   totalProfit: number;
   totalRepPayment: number;
 }
 
 export default function App() {
+  const formatDate = (date: Date) => {
+    const day = date.getDate();
+    const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    const month = monthNames[date.getMonth()];
+    const year = date.getFullYear().toString().slice(-2);
+    return `${day}-${month}-${year}`;
+  };
+
   const [currentTab, setCurrentTab] = useState<'home' | 'pos' | 'stock' | 'ledger' | 'activity' | 'more'>('home');
   const [timeframe, setTimeframe] = useState<'today' | 'week' | 'month' | 'more'>('today');
   
@@ -143,7 +166,13 @@ export default function App() {
     const saved = localStorage.getItem('abdus_store_orders');
     return saved ? JSON.parse(saved) : [];
   });
-  const [newCustomersCountToday, setNewCustomersCountToday] = useState<number>(3);
+
+  const [activities, setActivities] = useState<Activity[]>(() => {
+    const saved = localStorage.getItem('abdus_store_activities');
+    return saved ? JSON.parse(saved) : [];
+  });
+
+  const [newCustomersCountToday, setNewCustomersCountToday] = useState<number>(0);
   
   // POS Cart State
   const [cart, setCart] = useState<CartItem[]>([]);
@@ -178,8 +207,14 @@ export default function App() {
   };
 
   // Categories & Units Lists
-  const [categoriesList, setCategoriesList] = useState<string[]>([]);
-  const [unitsList, setUnitsList] = useState<string[]>([]);
+  const [categoriesList, setCategoriesList] = useState<string[]>(() => {
+    const saved = localStorage.getItem('abdus_store_categories');
+    return saved ? JSON.parse(saved) : ['মুদি', 'সিগারেট', 'কসমেটিকস', 'অন্যান্য'];
+  });
+  const [unitsList, setUnitsList] = useState<string[]>(() => {
+    const saved = localStorage.getItem('abdus_store_units');
+    return saved ? JSON.parse(saved) : ['কেজি', 'প্যাকেট', 'পিস', 'বোতল', 'লিটার'];
+  });
 
   // Stock Screen State
   const [stockSearchQuery, setStockSearchQuery] = useState<string>('');
@@ -200,12 +235,66 @@ export default function App() {
   const [depositAmountInput, setDepositAmountInput] = useState<string>('');
   const [depositMethod, setDepositMethod] = useState<'cash' | 'bkash'>('cash');
 
-  const [syncTime, setSyncTime] = useState<string>('28-Oct-2026 3:58PM');
+  const [syncTime, setSyncTime] = useState<string>(() => {
+    const now = new Date();
+    const day = now.getDate();
+    const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    const month = monthNames[now.getMonth()];
+    const year = now.getFullYear();
+    let hours = now.getHours();
+    const minutes = now.getMinutes() < 10 ? `0${now.getMinutes()}` : now.getMinutes();
+    const ampm = hours >= 12 ? 'PM' : 'AM';
+    hours = hours % 12;
+    hours = hours ? hours : 12;
+    return `Sync: ${day}-${month}-${year.toString().slice(-2)} ${hours}:${minutes}${ampm}`;
+  });
   const [isSyncing, setIsSyncing] = useState<boolean>(false);
   const [isScriptModalOpen, setIsScriptModalOpen] = useState<boolean>(false);
   const [isCategoryModalOpen, setIsCategoryModalOpen] = useState<boolean>(false);
   const [newCatInput, setNewCatInput] = useState('');
   const [newUnitInput, setNewUnitInput] = useState('');
+
+  const [editingProduct, setEditingProduct] = useState<Product | null>(null);
+  const [restockAmount, setRestockAmount] = useState<string>('');
+  const [editProdName, setEditProdName] = useState('');
+  const [editProdCategory, setEditProdCategory] = useState('');
+  const [editProdUnit, setEditProdUnit] = useState('');
+  const [editProdBuy, setEditProdBuy] = useState('');
+  const [editProdSell, setEditProdSell] = useState('');
+  const [editProdRep, setEditProdRep] = useState('');
+  const [editProdPhone, setEditProdPhone] = useState('');
+  
+  const [isSubmittingSale, setIsSubmittingSale] = useState(false);
+
+  const logActivity = (type: Activity['type'], title: string, description: string, amount: number) => {
+    const now = new Date();
+    const day = now.getDate();
+    const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    const month = monthNames[now.getMonth()];
+    const year = now.getFullYear().toString().slice(-2);
+    const dateStr = formatDate(now);
+
+    const newAct: Activity = {
+      id: `act-${Date.now()}-${Math.random()}`,
+      type,
+      title,
+      description,
+      amount,
+      timestamp: now.toISOString(),
+      date: dateStr
+    };
+    setActivities(prev => {
+      const updated = [newAct, ...prev].slice(0, 100);
+      localStorage.setItem('abdus_store_activities', JSON.stringify(updated));
+      return updated;
+    });
+  };
+
+  useEffect(() => {
+    if (activities.length === 0) {
+      logActivity('payment', 'সিস্টেম প্রস্তুত', 'আব্দুস সালাম স্টোর অ্যাপ চালু হয়েছে', 0);
+    }
+  }, []);
 
   const [sheetUrl, setSheetUrl] = useState<string>(() => {
     return localStorage.getItem('google_sheet_url') || 'https://script.google.com/macros/s/AKfycbx6qXyoYua4tUchRlaa0mH78EXxgbvmRWmVpWfxv5v4_At4_QGvwS13H8ruZf1J3bGBeA/exec';
@@ -229,105 +318,102 @@ export default function App() {
   }, [categoriesList]);
 
   useEffect(() => {
+    localStorage.setItem('abdus_store_units', JSON.stringify(unitsList));
+  }, [unitsList]);
+
+  useEffect(() => {
+    // Activities are now saved directly in logActivity to ensure persistence
+  }, [activities]);
+
+  useEffect(() => {
     localStorage.setItem('google_sheet_url', sheetUrl);
   }, [sheetUrl]);
 
   const handleSync = async () => {
+    if (isSyncing) return;
     setIsSyncing(true);
     try {
-      const formattedBikri = orders.flatMap(o => {
+      const formattedBikri = orders.map(o => {
         const custObj = customers.find(c => c.name === o.customerName);
         const custLoc = custObj ? custObj.address : 'রায়পুর বাজার';
-        return o.items.map(item => ({
-          'invoice no': o.invoiceNo,
+        
+        // Group items: "Product - 1 pics, Product 2 - 2 L"
+        const productSummary = o.items.map(item => {
+          return `${item.product.name} - ${item.quantity} ${item.isSticks ? 'শলাকা' : item.product.unit}`;
+        }).join(', ');
+
+        const totalCost = o.items.reduce((sum, item) => sum + (item.product.buyPrice * item.quantity), 0);
+        const totalProfit = o.items.reduce((sum, item) => {
+          const price = item.isSticks ? (item.product.stickPrice || item.product.sellPrice / (item.product.piecesPerPacket || 1)) : item.product.sellPrice;
+          return sum + ((price - item.product.buyPrice) * item.quantity);
+        }, 0);
+
+        return {
+          'invoice no': String(o.invoiceNo).trim(),
           'date': o.date,
-          'customer name': o.customerName,
-          'customer mobile': o.customerPhone,
+          'customer name': String(o.customerName).trim(),
+          'customer mobile': String(o.customerPhone).trim(),
           'location': custLoc,
-          'product name': item.product.name,
-          'category': item.product.category,
-          'cost': item.product.buyPrice * item.quantity,
-          'sales': item.product.sellPrice * item.quantity,
-          'discount': Math.round(o.discount / o.items.length),
-          'baki': Math.round(o.due / o.items.length),
+          'product name': productSummary,
+          'category': o.items[0]?.product.category || 'অন্যান্য',
+          'cost': totalCost,
+          'sales': o.total,
+          'discount': o.discount,
+          'baki': o.due,
           'payment method': o.paymentType,
-          'profit': (item.product.sellPrice - item.product.buyPrice) * item.quantity
-        }));
+          'profit': totalProfit,
+          'datetime': new Date().toISOString().replace('T', ' ').split('.')[0] // Better datetime format
+        };
       });
 
       const payload = {
         action: 'syncData',
         tabs: ['bikri', 'stock', 'bakir khata', 'catgeory', 'units'],
         bikri: formattedBikri,
-        stock: products,
-        'bakir khata': customers,
-        catgeory: categoriesList,
-        units: unitsList,
+        stock: products.map(p => ({ 
+          ...p, 
+          datetime: new Date().toISOString().replace('T', ' ').split('.')[0] 
+        })),
+        'bakir khata': customers.map(c => ({ 
+          ...c, 
+          datetime: new Date().toISOString().replace('T', ' ').split('.')[0] 
+        })),
+        catgeory: categoriesList.map(cat => ({ 
+          category_name: cat, 
+          datetime: new Date().toISOString().replace('T', ' ').split('.')[0] 
+        })),
+        units: unitsList.map(u => ({ 
+          unit_name: u, 
+          datetime: new Date().toISOString().replace('T', ' ').split('.')[0] 
+        })),
         timestamp: new Date().toISOString()
       };
 
       const jsonStr = JSON.stringify(payload);
 
-      // Method 1: Form submission to hidden iframe (bypasses CORS restrictions & Google Apps Script 302 redirects)
-      let iframe = document.getElementById('gscript_sync_target_iframe') as HTMLIFrameElement;
-      if (!iframe) {
-        iframe = document.createElement('iframe');
-        iframe.id = 'gscript_sync_target_iframe';
-        iframe.name = 'gscript_sync_target_iframe';
-        iframe.style.display = 'none';
-        document.body.appendChild(iframe);
-      }
-
-      const form = document.createElement('form');
-      form.method = 'POST';
-      form.action = sheetUrl;
-      form.target = 'gscript_sync_target_iframe';
-
-      const input = document.createElement('input');
-      input.type = 'hidden';
-      input.name = 'data';
-      input.value = jsonStr;
-      form.appendChild(input);
-
-      document.body.appendChild(form);
-      form.submit();
-      setTimeout(() => {
-        try { document.body.removeChild(form); } catch(e){}
-      }, 500);
-
-      // Method 2: Fetch POST fallback
-      fetch(sheetUrl, {
+      await fetch(sheetUrl, {
         method: 'POST',
         mode: 'no-cors',
         headers: { 'Content-Type': 'text/plain' },
         body: jsonStr
-      }).catch(() => {});
-
-      // Method 3: Fetch GET fallback
-      fetch(`${sheetUrl}?action=syncData&data=${encodeURIComponent(jsonStr)}`, {
-        method: 'GET',
-        mode: 'no-cors'
-      }).catch(() => {});
+      });
 
     } catch (err) {
       console.error("Sync error:", err);
     } finally {
-      setTimeout(() => {
-        setIsSyncing(false);
-        const now = new Date();
-        const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-        const day = now.getDate();
-        const month = monthNames[now.getMonth()];
-        const year = now.getFullYear();
-        let hours = now.getHours();
-        const minutes = now.getMinutes() < 10 ? `0${now.getMinutes()}` : now.getMinutes();
-        const ampm = hours >= 12 ? 'PM' : 'AM';
-        hours = hours % 12;
-        hours = hours ? hours : 12;
-        const newSyncStr = `${day}-${month}-${year} ${hours}:${minutes}${ampm}`;
-        setSyncTime(newSyncStr);
-        alert(`গুগল শিটে ডাটা সিঙ্ক সম্পন্ন হয়েছে!\n\nট্যাবসমূহ: bikri (কলাম: customer name, customer mobile, location সহ), stock, bakir khata, catgeory`);
-      }, 800);
+      setIsSyncing(false);
+      const now = new Date();
+      const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+      const day = now.getDate();
+      const month = monthNames[now.getMonth()];
+      const year = now.getFullYear();
+      let hours = now.getHours();
+      const minutes = now.getMinutes() < 10 ? `0${now.getMinutes()}` : now.getMinutes();
+      const ampm = hours >= 12 ? 'PM' : 'AM';
+      hours = hours % 12;
+      hours = hours ? hours : 12;
+      const newSyncStr = `Sync: ${day}-${month}-${year.toString().slice(-2)} ${hours}:${minutes}${ampm}`;
+      setSyncTime(newSyncStr);
     }
   };
 
@@ -362,7 +448,10 @@ export default function App() {
     setCart(prev => prev.filter(item => item.product.id !== productId));
   };
 
-  const cartSubtotal = cart.reduce((sum, item) => sum + item.product.sellPrice * item.quantity, 0);
+  const cartSubtotal = cart.reduce((sum, item) => {
+    const price = item.isSticks ? (item.product.stickPrice || item.product.sellPrice / (item.product.piecesPerPacket || 1)) : item.product.sellPrice;
+    return sum + (price * item.quantity);
+  }, 0);
   const cartTotal = Math.max(0, cartSubtotal - discountInput);
 
   // Step 1: Trigger Print Memo Preview before final submission
@@ -409,8 +498,8 @@ export default function App() {
       paid: paidAmt,
       due: dueAmt,
       paymentType: dueAmt > 0 ? 'credit' : 'cash',
-      date: '28-Oct-26',
-      rawDate: '2026-10-28',
+      date: formatDate(new Date()),
+      rawDate: new Date().toISOString().split('T')[0],
       status: dueAmt > 0 ? 'pending' : 'completed'
     };
 
@@ -418,8 +507,9 @@ export default function App() {
   };
 
   // Step 2: Confirm & Submit Sale (Robustly adds due to customer's account if due > 0)
-  const handleConfirmAndSubmitSale = () => {
-    if (!printPreviewOrder) return;
+  const handleConfirmAndSubmitSale = async () => {
+    if (!printPreviewOrder || isSubmittingSale) return;
+    setIsSubmittingSale(true);
     const order = printPreviewOrder;
 
     // Update product stock
@@ -427,7 +517,8 @@ export default function App() {
       return prev.map(p => {
         const cartItem = order.items.find(ci => ci.product.id === p.id);
         if (cartItem) {
-          return { ...p, stock: Math.max(0, p.stock - cartItem.quantity) };
+          const reduction = cartItem.isSticks ? (cartItem.quantity / (p.piecesPerPacket || 1)) : cartItem.quantity;
+          return { ...p, stock: Math.max(0, p.stock - reduction) };
         }
         return p;
       });
@@ -441,7 +532,8 @@ export default function App() {
         phone: newCustPhone.trim() || '01700000000',
         address: newCustAddress.trim() || 'রায়পুর বাজার',
         dueAmount: order.due,
-        lastPurchaseDate: '28-Oct-26',
+        lastPurchaseDate: formatDate(new Date()),
+        createdAt: formatDate(new Date()),
         status: order.due > 0 ? 'pending' : 'clear'
       };
       setCustomers([newCustObj, ...customers]);
@@ -459,7 +551,8 @@ export default function App() {
               phone: order.customerPhone,
               address: 'রায়পুর বাজার',
               dueAmount: order.due,
-              lastPurchaseDate: '28-Oct-26',
+              lastPurchaseDate: formatDate(new Date()),
+              createdAt: formatDate(new Date()),
               status: 'pending'
             },
             ...prev
@@ -472,7 +565,7 @@ export default function App() {
               ...c,
               dueAmount: newDue,
               status: newDue > 0 ? 'pending' : 'clear',
-              lastPurchaseDate: '28-Oct-26'
+              lastPurchaseDate: formatDate(new Date())
             };
           }
           return c;
@@ -480,7 +573,11 @@ export default function App() {
       });
     }
 
-    setOrders([order, ...orders]);
+    setOrders(prev => {
+      const updated = [order, ...prev];
+      localStorage.setItem('abdus_store_orders', JSON.stringify(updated));
+      return updated;
+    });
     setSuccessModal(order);
     setPrintPreviewOrder(null);
     setCart([]);
@@ -490,10 +587,13 @@ export default function App() {
     setNewCustPhone('');
     setNewCustAddress('');
 
+    logActivity('sale', `নতুন বিক্রি: ${order.customerName}`, `${order.items.length}টি পণ্য, ইনভয়েস: ${order.invoiceNo}`, order.total);
+
     // Trigger Auto-Sync to Google Sheets immediately in background
-    setTimeout(() => {
-      handleSync();
-    }, 300);
+    setTimeout(async () => {
+      await handleSync();
+      setIsSubmittingSale(false);
+    }, 500);
   };
 
   // Calculations for Home Metrics
@@ -502,7 +602,7 @@ export default function App() {
 
   // Metrics based on timeframe
   const filteredOrders = orders.filter(o => {
-    if (timeframe === 'today') return o.rawDate === '2026-10-28';
+    if (timeframe === 'today') return o.rawDate === new Date().toISOString().split('T')[0];
     if (timeframe === 'week') return true;
     return true; // month
   });
@@ -510,17 +610,27 @@ export default function App() {
   const totalOrdersCount = filteredOrders.length;
   const totalSalesAmount = filteredOrders.reduce((sum, o) => sum + o.total, 0);
   const totalCustomersCount = customers.length;
-  const newCustomersCount = filteredOrders.filter(o => o.customerName !== 'নগদ ক্রেতা').length;
+  
+  // New customers added to the ledger in the current timeframe
+  const newCustomersCount = customers.filter(c => {
+    if (timeframe === 'today') return c.createdAt === formatDate(new Date());
+    // For week/month we'd need more complex date parsing, 
+    // but for now, today is most important.
+    return c.createdAt === formatDate(new Date()); 
+  }).length;
+  
+  const oldCustomersCount = customers.length - newCustomersCount;
   
   const totalProfitAmount = filteredOrders.reduce((sum, o) => {
     const orderProfit = o.items.reduce((itemSum, item) => {
-      const profitPerUnit = item.product.sellPrice - item.product.buyPrice;
+      const price = item.isSticks ? (item.product.stickPrice || item.product.sellPrice / (item.product.piecesPerPacket || 1)) : item.product.sellPrice;
+      const profitPerUnit = price - item.product.buyPrice;
       return itemSum + (profitPerUnit * item.quantity);
     }, 0);
     return sum + orderProfit;
   }, 0);
 
-  const totalRepPayment = Math.round(totalSalesAmount * 0.04);
+  const totalRepPayment = 0;
 
   // Date-wise history aggregation
   const dateHistoryMap: { [key: string]: DateHistoryRecord } = {};
@@ -531,23 +641,35 @@ export default function App() {
         date: dKey,
         totalOrders: 0,
         totalSales: 0,
-        totalCustomers: 0,
+        totalOldCustomers: 0,
         totalNewCustomers: 0,
+        totalTotalCustomers: 0,
         totalProfit: 0,
         totalRepPayment: 0
       };
     }
     dateHistoryMap[dKey].totalOrders += 1;
     dateHistoryMap[dKey].totalSales += o.total;
-    dateHistoryMap[dKey].totalCustomers += 1;
-    dateHistoryMap[dKey].totalNewCustomers += (o.customerName !== 'নগদ ক্রেতা' ? 1 : 0);
+    dateHistoryMap[dKey].totalTotalCustomers += 1;
     
-    const ordProfit = o.items.reduce((s, i) => s + ((i.product.sellPrice - i.product.buyPrice) * i.quantity), 0);
+    const isNew = customers.some(c => c.name === o.customerName && c.createdAt === o.date);
+    if (isNew) {
+      dateHistoryMap[dKey].totalNewCustomers += 1;
+    } else {
+      dateHistoryMap[dKey].totalOldCustomers += 1;
+    }
+    
+    const ordProfit = o.items.reduce((s, i) => {
+      const price = i.isSticks ? (i.product.stickPrice || i.product.sellPrice / (i.product.piecesPerPacket || 1)) : i.product.sellPrice;
+      return s + ((price - i.product.buyPrice) * i.quantity);
+    }, 0);
     dateHistoryMap[dKey].totalProfit += ordProfit;
-    dateHistoryMap[dKey].totalRepPayment += Math.round(o.total * 0.04);
+    dateHistoryMap[dKey].totalRepPayment = 0; 
   });
 
-  const dateHistoryList = Object.values(dateHistoryMap);
+  const dateHistoryList = Object.values(dateHistoryMap).sort((a, b) => {
+    return new Date(b.date).getTime() - new Date(a.date).getTime();
+  });
 
   const matchesProductSearch = (product: Product, query: string) => {
     if (!query.trim()) return true;
@@ -565,26 +687,22 @@ export default function App() {
     <div className="h-screen w-screen overflow-hidden bg-[#F3F4F6] text-gray-900 font-['Hind_Siliguri',sans-serif] flex flex-col items-center">
       
       {/* Main Container wrapper: flex-col h-full overflow-hidden */}
-      <div className={`w-full h-full flex flex-col overflow-hidden bg-[#F3F4F6] relative ${isMobileView ? 'max-w-md mx-auto shadow-2xl rounded-none md:rounded-3xl border border-gray-200' : 'w-full'}`}>
+      <div className={`w-full h-full flex flex-col overflow-hidden bg-[#F8FAFC] relative`}>
         
-        {/* App Header (Fixed Top - Always Visible) */}
-        <header className="flex-none z-30 bg-[#113F33] text-white px-3 py-2.5 shadow-md flex items-center justify-between">
-          <div className="flex items-center space-x-2.5 min-w-0">
-            <div className="w-9 h-9 rounded-xl bg-white p-0.5 shadow-md overflow-hidden flex-shrink-0 flex items-center justify-center border border-[#1B7A5E]">
+        {/* App Header (Fixed Top) */}
+        <header className="flex-none z-30 bg-[#113F33] text-white px-3 py-2 flex items-center justify-between shadow-sm">
+          <div className="flex items-center space-x-2 min-w-0">
+            <div className="w-8 h-8 rounded-lg bg-white p-0.5 shadow-sm overflow-hidden flex-shrink-0 flex items-center justify-center border border-emerald-500/30">
               <img 
                 src="/assets/aistudio/image_2aae7fd3.png" 
-                alt="Store Logo" 
-                className="w-full h-full object-cover rounded-lg"
-                onError={(e)=>{
-                  (e.target as HTMLElement).style.display = 'none';
-                }}
+                alt="Logo" 
+                className="w-full h-full object-cover rounded-md"
+                onError={(e)=>{ (e.target as HTMLElement).style.display = 'none'; }}
               />
             </div>
             <div className="min-w-0">
-              <h1 className="text-sm md:text-base font-bold tracking-tight text-white truncate">
-                {STORE_NAME}
-              </h1>
-              <p className="text-[10px] text-emerald-200/90 font-medium truncate">ফোন: {STORE_PHONE}</p>
+              <h1 className="text-sm font-bold text-white truncate leading-tight">{STORE_NAME}</h1>
+              <p className="text-[9px] text-emerald-300/80 font-medium truncate">{STORE_PHONE}</p>
             </div>
           </div>
           
@@ -600,16 +718,16 @@ export default function App() {
             )}
             <button 
               onClick={handleSync}
-              className="flex items-center gap-1 bg-[#1B7A5E] hover:bg-[#155e48] text-white px-2 py-1 rounded-lg transition text-[9px] shadow-sm font-medium"
+              className="flex items-center gap-1 bg-[#1B7A5E] hover:bg-[#155e48] text-white px-2 py-1 rounded-lg transition text-[9px] shadow-sm font-bold"
             >
               <RefreshCw className={`w-2.5 h-2.5 ${isSyncing ? 'animate-spin' : ''}`} />
-              <span className="whitespace-nowrap">Last Sync: {syncTime}</span>
+              <span className="whitespace-nowrap">Sync: {syncTime}</span>
             </button>
           </div>
         </header>
 
-        {/* Dynamic Content Area (Scrolls independently) */}
-        <main className="flex-1 overflow-y-auto p-3.5 pb-20 relative">
+        {/* Dynamic Content Area */}
+        <main className={`flex-1 overflow-y-auto relative scroll-smooth ${currentTab === 'pos' || currentTab === 'stock' ? 'p-0' : 'p-2'} pb-24`}>
           
           {/* ================= 1. HOME / DASHBOARD SCREEN ================= */}
           {currentTab === 'home' && (
@@ -644,91 +762,60 @@ export default function App() {
               <div className="grid grid-cols-3 gap-1.5 w-full">
                 {[
                   { label: 'অর্ডার সংখ্যা', val: totalOrdersCount },
-                  { label: 'পুরাতন', val: customers.filter(c=>c.status==='clear').length },
-                  { label: 'নতুন', val: newCustomersCount },
-                  { label: 'বিক্রি', val: totalSalesAmount.toLocaleString('en-IN') },
-                  { label: 'মোট লাভ', val: totalProfitAmount.toLocaleString('en-IN') },
-                  { label: 'প্রতিনিধি', val: totalRepPayment.toLocaleString('en-IN') },
+                  { label: 'পুরাতন ক্রেতা', val: oldCustomersCount },
+                  { label: 'নতুন ক্রেতা', val: newCustomersCount },
+                  { label: 'বিক্রি (৳)', val: totalSalesAmount.toLocaleString('en-IN') },
+                  { label: 'মোট লাভ (৳)', val: totalProfitAmount.toLocaleString('en-IN') },
+                  { label: 'প্রতিনিধি পরিশোধ', val: totalRepPayment.toLocaleString('en-IN') },
                 ].map((item, i) => (
-                  <div key={i} className="bg-white p-2 rounded-lg shadow-sm border border-gray-100 text-center">
+                  <div key={i} className="bg-white p-2 rounded-xl shadow-sm border border-emerald-100 text-center hover:bg-emerald-50/30 transition">
                     <div className="text-[10px] text-gray-500 font-medium whitespace-nowrap">{item.label}</div>
-                    <div className="text-sm font-bold text-gray-900 tabular-nums">{item.val}</div>
+                    <div className="text-sm font-bold text-gray-800 tabular-nums">{item.val}</div>
                   </div>
                 ))}
               </div>
 
-              {/* Compact History Table */}
-              <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden w-full text-[10px]">
-                <div className="p-2 bg-emerald-50/50 border border-emerald-100 rounded-t-lg font-bold text-gray-800 grid grid-cols-9 gap-1 text-center">
-                  <div className="col-span-1">তারিখ</div>
-                  <div className="col-span-1">অর্ডার</div>
-                  <div className="col-span-1">পুরাতন<br/>ক্রেতা</div>
-                  <div className="col-span-1">নতুন<br/>ক্রেতা</div>
-                  <div className="col-span-1">মোট<br/>ক্রেতা</div>
-                  <div className="col-span-1">বিক্রি</div>
-                  <div className="col-span-1">ক্রেতা<br/>প্রতি</div>
-                  <div className="col-span-1">লাভ</div>
-                  <div className="col-span-1">প্রতিনিধি<br/>পরিশোধ</div>
-                </div>
-                <div className="divide-y divide-gray-100">
-                  {dateHistoryList.length === 0 ? (
-                    <div className="p-4 text-center text-xs text-gray-500">কোনো ডাটা পাওয়া যায়নি</div>
-                  ) : dateHistoryList.slice(0, 10).map((r, i) => (
-                    <div key={i} className="p-2 grid grid-cols-9 gap-1 text-center items-center hover:bg-gray-50 tabular-nums">
-                      <div className="col-span-1 font-bold">{r.date.split('-')[0]}</div>
-                      <div className="col-span-1">{r.totalOrders}</div>
-                      <div className="col-span-1">{Math.max(0, r.totalCustomers - r.totalNewCustomers)}</div>
-                      <div className="col-span-1">{r.totalNewCustomers}</div>
-                      <div className="col-span-1">{r.totalCustomers}</div>
-                      <div className="col-span-1">{r.totalSales}</div>
-                      <div className="col-span-1">{(r.totalSales / (r.totalCustomers || 1)).toFixed(0)}</div>
-                      <div className="col-span-1">{r.totalProfit}</div>
-                      <div className="col-span-1">{r.totalRepPayment}</div>
-                    </div>
-                  ))}
-                </div>
+              {/* Compact History Table with borders */}
+              <div className="bg-white rounded-xl shadow-sm border border-emerald-200 overflow-x-auto w-full text-[10px]">
+                <table className="w-full border-collapse">
+                  <thead className="bg-emerald-50/50 border-b border-emerald-200 font-bold text-gray-800">
+                    <tr>
+                      <th className="border-r border-emerald-100 py-2 px-1 text-center">তারিখ</th>
+                      <th className="border-r border-emerald-100 py-2 px-1 text-center">অর্ডার</th>
+                      <th className="border-r border-emerald-100 py-2 px-1 text-center">পুরাতন<br/>ক্রেতা</th>
+                      <th className="border-r border-emerald-100 py-2 px-1 text-center">নতুন<br/>ক্রেতা</th>
+                      <th className="border-r border-emerald-100 py-2 px-1 text-center">মোট<br/>ক্রেতা</th>
+                      <th className="border-r border-emerald-100 py-2 px-1 text-center">বিক্রি</th>
+                      <th className="border-r border-emerald-100 py-2 px-1 text-center">ক্রেতা<br/>প্রতি লাভ</th>
+                      <th className="border-r border-emerald-100 py-2 px-1 text-center">লাভ</th>
+                      <th className="py-2 px-1 text-center">প্রতিনিধি<br/>পরিশোধ</th>
+                    </tr>
+                  </thead>
+                  <tbody className="bg-white">
+                    {dateHistoryList.length === 0 ? (
+                      <tr>
+                        <td colSpan={9} className="p-8 text-center text-xs text-gray-400 italic">কোনো ডাটা পাওয়া যায়নি</td>
+                      </tr>
+                    ) : dateHistoryList.slice(0, 20).map((r, i) => (
+                      <tr key={i} className="text-center items-center hover:bg-emerald-50/30 tabular-nums border-b border-emerald-50">
+                        <td className="border-r border-emerald-50 py-2.5 font-bold text-gray-700">{r.date}</td>
+                        <td className="border-r border-emerald-50 py-2.5">{r.totalOrders}</td>
+                        <td className="border-r border-emerald-50 py-2.5">{r.totalOldCustomers}</td>
+                        <td className="border-r border-emerald-50 py-2.5">{r.totalNewCustomers}</td>
+                        <td className="border-r border-emerald-50 py-2.5">{r.totalTotalCustomers}</td>
+                        <td className="border-r border-emerald-50 py-2.5 font-bold">{r.totalSales}</td>
+                        <td className="border-r border-emerald-50 py-2.5">{(r.totalProfit / (r.totalTotalCustomers || 1)).toFixed(0)}</td>
+                        <td className="border-r border-emerald-50 py-2.5 font-bold text-emerald-700">{r.totalProfit}</td>
+                        <td className="py-2.5 text-gray-400">{r.totalRepPayment}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
               </div>
 
             </div>
           )}
 
-          {currentTab === 'ledger' && (
-            <div className="animate-fadeIn w-full h-full flex flex-col">
-              {/* Summary Section */}
-              <div className="grid grid-cols-2 gap-2 p-2">
-                <div className="bg-white p-3 rounded-xl shadow-sm border border-gray-100 text-center">
-                  <div className="text-[10px] text-gray-500 font-medium">মোট বাকি</div>
-                  <div className="text-sm font-bold text-red-600 tabular-nums">
-                    {customers.reduce((sum, c) => sum + c.dueAmount, 0).toLocaleString('en-IN')} ৳
-                  </div>
-                </div>
-                <div className="bg-white p-3 rounded-xl shadow-sm border border-gray-100 text-center">
-                  <div className="text-[10px] text-gray-500 font-medium">মোট ক্রেতা (unique)</div>
-                  <div className="text-sm font-bold text-gray-900 tabular-nums">{new Set(customers.map(c => c.name)).size}</div>
-                </div>
-              </div>
-
-              {/* Table Header */}
-              <div className="grid grid-cols-5 text-[10px] font-bold text-gray-700 border-b border-gray-200 bg-gray-50 p-2 text-center">
-                <div className="text-left">ক্রেতার নাম</div>
-                <div>মোবাইল</div>
-                <div>ঠিকানা</div>
-                <div>বাকি</div>
-                <div>অ্যাকশন</div>
-              </div>
-              <div className="flex-1 overflow-y-auto">
-                {customers.map(c => (
-                  <div key={c.id} className="grid grid-cols-5 text-[11px] border-b border-gray-100 p-2 items-center text-center">
-                    <div className="text-left font-bold truncate">{c.name}</div>
-                    <div className="text-gray-600">{c.phone}</div>
-                    <div className="text-gray-600 truncate">{c.address}</div>
-                    <div className="font-bold text-red-600 tabular-nums">{c.dueAmount}</div>
-                    <div><button className="text-emerald-700 font-bold underline">পেমেন্ট</button></div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
 
           {/* ================= 2. POS / SALES SCREEN (নতুন বিক্রি) ================= */}
           {currentTab === 'pos' && (
@@ -737,7 +824,7 @@ export default function App() {
 
 
               {/* Customer Type Selector */}
-              <div className="bg-white p-2 rounded-2xl shadow-sm border border-gray-200">
+              <div className="bg-white p-2 rounded-2xl shadow-sm border border-emerald-100">
                 <div className="flex bg-gray-100 rounded-xl p-0.5 mb-2">
                   <button onClick={() => { setSelectedExistingCustomer(''); setNewCustName(''); }} className={`flex-1 py-1.5 text-xs font-bold rounded-lg ${!selectedExistingCustomer && !newCustName ? 'bg-white shadow' : ''}`}>নগদ</button>
                   <button onClick={() => { setSelectedExistingCustomer(' '); setNewCustName(''); }} className={`flex-1 py-1.5 text-xs font-bold rounded-lg ${selectedExistingCustomer ? 'bg-white shadow' : ''}`}>পুরাতন</button>
@@ -773,15 +860,15 @@ export default function App() {
                   )}
                 </div>
 
-                <div className="flex space-x-2 overflow-x-auto pb-1 scrollbar-none">
+                <div className="flex space-x-1.5 overflow-x-auto p-2 scrollbar-none bg-white">
                   {['সব', ...categoriesList].map(cat => (
                     <button
                       key={cat}
                       onClick={() => setSelectedCategoryFilter(cat)}
-                      className={`px-3 py-1.5 rounded-full text-xs font-medium whitespace-nowrap transition ${
+                      className={`px-4 py-2 rounded-xl text-[11px] font-bold whitespace-nowrap transition-all shadow-sm ${
                         selectedCategoryFilter === cat 
-                          ? 'bg-[#113F33] text-white shadow-sm' 
-                          : 'bg-white text-gray-600 border border-gray-200 hover:bg-gray-50'
+                          ? 'bg-[#113F33] text-white' 
+                          : 'bg-emerald-50/50 text-gray-600 border border-emerald-100'
                       }`}
                     >
                       {cat}
@@ -790,8 +877,7 @@ export default function App() {
                 </div>
               </div>
 
-              {/* Product Grid - Ultra Compact Widescreen Layout */}
-              <div className="grid gap-2 grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 2xl:grid-cols-7">
+              <div className="grid gap-2 grid-cols-2 xs:grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 xl:grid-cols-8 2xl:grid-cols-10">
                 {products
                   .filter(p => selectedCategoryFilter === 'সব' || p.category === selectedCategoryFilter)
                   .filter(p => matchesProductSearch(p, posSearchQuery))
@@ -801,27 +887,23 @@ export default function App() {
                       <div 
                         key={product.id}
                         onClick={() => addToCart(product)}
-                        className="bg-white p-2 rounded-xl shadow-xs border border-gray-200 hover:border-[#1B7A5E] transition cursor-pointer flex flex-col justify-between group active:scale-98 relative"
+                        className="bg-white p-2 rounded-xl shadow-xs border border-emerald-100 hover:border-emerald-500 transition-all cursor-pointer flex flex-col justify-between active:scale-95 group relative"
                       >
-                        <div>
-                          <div className="flex justify-between items-center mb-1 gap-1 text-[9px]">
-                            <span className="bg-gray-100 text-gray-600 px-1 py-0.2 rounded truncate">
-                              {product.category}
-                            </span>
-                            <span className={`px-1 py-0.2 rounded font-medium truncate ${isLow ? 'bg-[#FEF3C7] text-[#D97706]' : 'bg-[#D1FAE5] text-[#059669]'}`}>
-                              {product.stock} {product.unit}
+                        <div className="space-y-1">
+                          <div className="flex justify-between items-center text-[8px] font-bold">
+                            <span className="bg-emerald-50 text-emerald-700 px-1 py-0.5 rounded truncate max-w-[50%]">{product.category}</span>
+                            <span className={`px-1 py-0.5 rounded ${isLow ? 'bg-amber-100 text-amber-700' : 'bg-blue-50 text-blue-700'}`}>
+                              {product.stock.toFixed(0)} {product.unit}
                             </span>
                           </div>
-                          <h4 className="font-bold text-[11px] text-gray-900 line-clamp-2 leading-tight group-hover:text-[#1B7A5E] transition">
-                            {product.name}
-                          </h4>
+                          <h4 className="font-bold text-[10px] text-gray-800 line-clamp-2 leading-tight min-h-[2.4em]">{product.name}</h4>
                         </div>
 
-                        <div className="flex items-center justify-between mt-2 pt-1 border-t border-gray-100">
-                          <span className="font-bold text-xs text-[#113F33]">{product.sellPrice}</span>
-                          <button className="w-5 h-5 rounded-lg bg-[#1B7A5E] text-white flex items-center justify-center shadow-xs hover:bg-[#113F33] transition">
+                        <div className="flex items-center justify-between mt-1.5 pt-1.5 border-t border-emerald-50">
+                          <span className="font-black text-[11px] text-[#113F33]">{product.sellPrice} ৳</span>
+                          <div className="w-5 h-5 rounded-lg bg-emerald-600 text-white flex items-center justify-center shadow-sm group-hover:bg-[#113F33]">
                             <Plus className="w-3 h-3" />
-                          </button>
+                          </div>
                         </div>
                       </div>
                     );
@@ -853,7 +935,7 @@ export default function App() {
             <div className="p-4 space-y-4 animate-fadeIn">
               
               {/* Search & Add Product Row */}
-              <div className="flex gap-2 items-center bg-white p-2 rounded-2xl shadow-sm border border-gray-200">
+              <div className="flex gap-2 items-center bg-white p-2 rounded-2xl shadow-sm border border-emerald-100">
                 <div className="flex-1 relative">
                   <Search className="w-4 h-4 text-gray-400 absolute left-3 top-2.5" />
                   <input 
@@ -894,38 +976,52 @@ export default function App() {
               )}
 
               {/* Stock Table / List */}
-              <div className="bg-white rounded-2xl shadow-sm border border-gray-200 overflow-hidden">
-                <div className="p-3 bg-gray-50 border-b border-gray-200 font-bold text-xs text-gray-700 grid grid-cols-12 gap-2">
-                  <div className="col-span-4">পণ্যের নাম</div>
+              <div className="bg-white rounded-2xl shadow-sm border border-emerald-100 overflow-hidden flex-1 flex flex-col">
+                <div className="p-2 bg-emerald-50/50 border-b border-emerald-100 font-bold text-[9px] text-emerald-900 grid grid-cols-12 gap-1 items-center sticky top-0 z-10">
+                  <div className="col-span-5">পণ্যের নাম</div>
                   <div className="col-span-3 text-center">স্টক</div>
-                  <div className="col-span-5 text-right">প্রতিনিধি ও মূল্য</div>
+                  <div className="col-span-4 text-right">মূল্য ও প্রতিনিধি</div>
                 </div>
 
-                <div className="divide-y divide-gray-100">
+                <div className="divide-y divide-emerald-50 overflow-y-auto">
                   {products
                     .filter(p => stockFilterTab === 'all' || (stockFilterTab === 'low' ? p.stock <= 5 : p.stock > 5))
                     .filter(p => matchesProductSearch(p, stockSearchQuery) || (p.repName && p.repName.toLowerCase().includes(stockSearchQuery.toLowerCase())))
                     .map(product => {
                       const isLow = product.stock <= 5;
                       return (
-                        <div key={product.id} className="p-3 grid grid-cols-12 gap-2 items-center hover:bg-gray-50 transition">
-                          <div className="col-span-4">
-                            <div className="font-bold text-xs text-gray-900 line-clamp-1">{product.name}</div>
-                            <div className="text-[10px] text-gray-500">{product.category}</div>
+                        <div 
+                          key={product.id} 
+                          onClick={() => {
+                            setEditingProduct(product);
+                            setEditProdName(product.name);
+                            setEditProdCategory(product.category);
+                            setEditProdUnit(product.unit);
+                            setEditProdBuy(String(product.buyPrice));
+                            setEditProdSell(String(product.sellPrice));
+                            setEditProdRep(product.repName);
+                            setEditProdPhone(product.repPhone);
+                            setRestockAmount('');
+                          }}
+                          className="p-2 grid grid-cols-12 gap-1 items-center text-[11px] hover:bg-emerald-50/30 transition cursor-pointer"
+                        >
+                          <div className="col-span-5">
+                            <div className="font-bold text-gray-800 line-clamp-1 leading-tight">{product.name}</div>
+                            <div className="text-[8px] text-gray-500 font-medium">{product.category}</div>
                           </div>
                           
                           <div className="col-span-3 text-center">
-                            <span className={`inline-block px-2 py-0.5 rounded-full text-[11px] font-bold ${
-                              isLow ? 'bg-[#FEF3C7] text-[#D97706]' : 'bg-[#D1FAE5] text-[#059669]'
+                            <span className={`inline-block px-1.5 py-0.5 rounded text-[9px] font-black ${
+                              isLow ? 'bg-amber-100 text-amber-700' : 'bg-emerald-100 text-emerald-700'
                             }`}>
-                              {product.stock} {product.unit}
+                              {product.stock.toFixed(0)} {product.unit}
                             </span>
                           </div>
 
-                          <div className="col-span-5 text-right">
-                            <div className="text-xs font-bold text-gray-900">{product.sellPrice}</div>
+                          <div className="col-span-4 text-right leading-tight">
+                            <div className="font-black text-gray-900">{product.sellPrice} ৳</div>
                             {product.repName && (
-                              <div className="text-[10px] text-[#1B7A5E] font-medium">প্র: {product.repName} ({product.repPhone})</div>
+                              <div className="text-[8px] text-emerald-600 truncate">প্র: {product.repName}</div>
                             )}
                           </div>
                         </div>
@@ -1051,6 +1147,22 @@ export default function App() {
                         </div>
                       </div>
 
+                      {(newProductCategory.includes('সিগারেট') || newProductCategory.includes('মুদি')) && (
+                        <div className="bg-amber-50/50 p-2.5 rounded-xl border border-amber-200 space-y-2">
+                          <span className="font-bold text-amber-900 block text-[10px]">প্যাকেট ও শলাকা সেটিংস (ঐচ্ছিক):</span>
+                          <div className="grid grid-cols-2 gap-2">
+                            <div>
+                              <label className="text-[10px] text-amber-700">প্যাকেটে শলাকা (সংখ্যা)</label>
+                              <input type="number" placeholder="যেমন: ১০" className="w-full px-2 py-1 bg-white border border-amber-200 rounded-lg" onChange={(e)=> { /* logic handled in save */ }} id="piece_per_packet_new" />
+                            </div>
+                            <div>
+                              <label className="text-[10px] text-amber-700">শলাকা বিক্রয় মূল্য</label>
+                              <input type="number" placeholder="যেমন: ১৫" className="w-full px-2 py-1 bg-white border border-amber-200 rounded-lg" id="stick_price_new" />
+                            </div>
+                          </div>
+                        </div>
+                      )}
+
                       {/* Representative Details */}
                       <div className="bg-emerald-50/50 p-2.5 rounded-xl border border-emerald-200 space-y-2">
                         <span className="font-bold text-[#113F33] block">কোম্পানি প্রতিনিধি (Representative) তথ্য:</span>
@@ -1081,39 +1193,45 @@ export default function App() {
                       >
                         বাতিল
                       </button>
-                      <button 
-                        onClick={() => {
-                          if (!newProductName.trim()) {
-                            alert('দয়া করে পণ্যের নাম দিন');
-                            return;
-                          }
-                          const newProd: Product = {
-                            id: `p-${Date.now()}`,
-                            name: newProductName,
-                            category: newProductCategory,
-                            stock: Number(newProductStock) || 0,
-                            unit: newProductUnit,
-                            buyPrice: Number(newProductBuy) || 0,
-                            sellPrice: Number(newProductSell) || 0,
-                            barcode: `${Math.floor(2000 + Math.random() * 9000)}`,
-                            repName: newProductRepName.trim() || 'নির্ধারিত নয়',
-                            repPhone: newProductRepPhone.trim() || '01700000000',
-                            searchTags: [newProductName.toLowerCase(), newProductCategory, newProductRepName.toLowerCase()]
-                          };
-                          setProducts([newProd, ...products]);
-                          setIsAddProductOpen(false);
-                          setNewProductName('');
-                          setNewProductStock('');
-                          setNewProductBuy('');
-                          setNewProductSell('');
-                          setNewProductRepName('');
-                          setNewProductRepPhone('');
-                          setNewProductRepPhone('');
-                        }}
-                        className="flex-1 py-2 rounded-xl bg-[#1B7A5E] text-white font-bold text-xs shadow hover:bg-[#113F33]"
-                      >
-                        সেভ করুন
-                      </button>
+                       <button 
+                         onClick={() => {
+                           if (!newProductName.trim()) {
+                             alert('দয়া করে পণ্যের নাম দিন');
+                             return;
+                           }
+                           const ppp = Number((document.getElementById('piece_per_packet_new') as HTMLInputElement)?.value) || undefined;
+                           const sp = Number((document.getElementById('stick_price_new') as HTMLInputElement)?.value) || undefined;
+                           
+                           const newProd: Product = {
+                             id: `p-${Date.now()}`,
+                             name: newProductName,
+                             category: newProductCategory,
+                             stock: Number(newProductStock) || 0,
+                             unit: newProductUnit,
+                             buyPrice: Number(newProductBuy) || 0,
+                             sellPrice: Number(newProductSell) || 0,
+                             barcode: `${Math.floor(2000 + Math.random() * 9000)}`,
+                             repName: newProductRepName.trim() || 'নির্ধারিত নয়',
+                             repPhone: newProductRepPhone.trim() || '01700000000',
+                             searchTags: [newProductName.toLowerCase(), newProductCategory, newProductRepName.toLowerCase()],
+                             piecesPerPacket: ppp,
+                             stickPrice: sp
+                           };
+                           setProducts([newProd, ...products]);
+                           logActivity('new_product', `নতুন পণ্য: ${newProd.name}`, `ক্যাটাগরি: ${newProd.category}, স্টক: ${newProd.stock}`, newProd.buyPrice * newProd.stock);
+                           setIsAddProductOpen(false);
+                           handleSync();
+                           setNewProductName('');
+                           setNewProductStock('');
+                           setNewProductBuy('');
+                           setNewProductSell('');
+                           setNewProductRepName('');
+                           setNewProductRepPhone('');
+                         }}
+                         className="flex-1 py-2 rounded-xl bg-[#1B7A5E] text-white font-bold text-xs shadow hover:bg-[#113F33]"
+                       >
+                         সেভ করুন
+                       </button>
                     </div>
                   </div>
                 </div>
@@ -1122,13 +1240,202 @@ export default function App() {
             </div>
           )}
 
+          {/* Stock Details & Update Modal */}
+          {editingProduct && (
+            <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4 backdrop-blur-sm animate-fadeIn">
+              <div className="bg-white rounded-3xl w-full max-w-sm p-6 space-y-4 shadow-2xl border border-gray-200">
+                <div className="flex justify-between items-center border-b border-gray-100 pb-3">
+                  <h3 className="font-bold text-sm text-gray-900 flex items-center gap-1.5">
+                    <Package className="w-4 h-4 text-[#1B7A5E]" /> স্টক আপডেট: {editingProduct.name}
+                  </h3>
+                  <button onClick={() => setEditingProduct(null)} className="text-gray-400 hover:text-gray-600">
+                    <X className="w-4 h-4" />
+                  </button>
+                </div>
+
+                <div className="space-y-4 text-xs">
+                  {/* Restock Section */}
+                  <div className="bg-emerald-50 p-3.5 rounded-2xl border border-emerald-200 space-y-2">
+                    <label className="font-bold text-[#113F33] block">নতুন স্টক যোগ করুন (Stock In):</label>
+                    <div className="flex gap-2">
+                      <input 
+                        type="number"
+                        placeholder="পরিমাণ লিখুন..."
+                        value={restockAmount}
+                        onChange={(e) => setRestockAmount(e.target.value)}
+                        className="flex-1 px-3 py-2 bg-white border border-gray-200 rounded-xl font-bold text-emerald-700"
+                      />
+                       <button 
+                         onClick={() => {
+                           const amt = Number(restockAmount);
+                           if (isNaN(amt) || amt <= 0) return;
+                           setProducts(prev => prev.map(p => p.id === editingProduct.id ? { ...p, stock: p.stock + amt } : p));
+                           logActivity('stock_in', `স্টক ইন: ${editingProduct.name}`, `${amt} ${editingProduct.unit} যুক্ত করা হয়েছে`, editingProduct.buyPrice * amt);
+                           alert(`${amt} ${editingProduct.unit} স্টক যোগ করা হয়েছে।`);
+                           setRestockAmount('');
+                           setTimeout(handleSync, 500);
+                         }}
+                         className="px-4 py-2 bg-[#1B7A5E] text-white rounded-xl font-bold"
+                       >
+                         যোগ করুন
+                       </button>
+                    </div>
+                    <p className="text-[10px] text-emerald-700 italic">বর্তমান স্টক: {editingProduct.stock} {editingProduct.unit}</p>
+                  </div>
+
+                  {/* Edit Details Section */}
+                  <div className="space-y-2">
+                    <label className="font-bold text-gray-700 block">পণ্যের তথ্য পরিবর্তন:</label>
+                    <div className="grid grid-cols-1 gap-2">
+                      <input type="text" placeholder="পণ্যের নাম" value={editProdName} onChange={(e) => setEditProdName(e.target.value)} className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-xl" />
+                      
+                      <div className="grid grid-cols-2 gap-2">
+                        <div>
+                          <label className="text-[10px] text-gray-500 block mb-1">ক্যাটাগরি</label>
+                          <select 
+                            value={editProdCategory} 
+                            onChange={(e) => setEditProdCategory(e.target.value)} 
+                            className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-xl"
+                          >
+                            {categoriesList.map(cat => <option key={cat} value={cat}>{cat}</option>)}
+                          </select>
+                        </div>
+                        <div>
+                          <label className="text-[10px] text-gray-500 block mb-1">একক</label>
+                          <select 
+                            value={editProdUnit} 
+                            onChange={(e) => setEditProdUnit(e.target.value)} 
+                            className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-xl"
+                          >
+                            {unitsList.map(u => <option key={u} value={u}>{u}</option>)}
+                          </select>
+                        </div>
+                      </div>
+
+                      <div className="grid grid-cols-2 gap-2">
+                        <div>
+                          <label className="text-[10px] text-gray-500">ক্রয় মূল্য</label>
+                          <input type="number" placeholder="ক্রয় মূল্য" value={editProdBuy} onChange={(e) => setEditProdBuy(e.target.value)} className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-xl font-bold" />
+                        </div>
+                        <div>
+                          <label className="text-[10px] text-gray-500">বিক্রয় মূল্য</label>
+                          <input type="number" placeholder="বিক্রয় মূল্য" value={editProdSell} onChange={(e) => setEditProdSell(e.target.value)} className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-xl font-bold text-emerald-700" />
+                        </div>
+                      </div>
+                      <div className="grid grid-cols-2 gap-2">
+                        <input type="text" placeholder="প্রতিনিধির নাম" value={editProdRep} onChange={(e) => setEditProdRep(e.target.value)} className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-xl" />
+                        <input type="text" placeholder="প্রতিনিধির ফোন" value={editProdPhone} onChange={(e) => setEditProdPhone(e.target.value)} className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-xl" />
+                      </div>
+                          {(editingProduct.category.includes('সিগারেট') || editingProduct.category.includes('মুদি')) && (
+                            <div className="bg-amber-50/50 p-2 rounded-xl border border-amber-200 grid grid-cols-2 gap-2 mt-1">
+                               <div>
+                                 <label className="text-[9px] text-amber-700">প্যাকেটে শলাকা</label>
+                                 <input type="number" id="piece_per_packet_edit" defaultValue={editingProduct.piecesPerPacket} className="w-full px-2 py-1 bg-white border border-amber-100 rounded text-xs" />
+                               </div>
+                               <div>
+                                 <label className="text-[9px] text-amber-700">শলাকা বিক্রয় মূল্য</label>
+                                 <input type="number" id="stick_price_edit" defaultValue={editingProduct.stickPrice} className="w-full px-2 py-1 bg-white border border-amber-100 rounded text-xs" />
+                               </div>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                </div>
+
+                <div className="flex gap-2 pt-2">
+                  <button 
+                    onClick={() => {
+                      setProducts(prev => prev.map(p => {
+                        if (p.id === editingProduct.id) {
+                          return {
+                            ...p,
+                            name: editProdName,
+                            category: editProdCategory,
+                            unit: editProdUnit,
+                            buyPrice: Number(editProdBuy) || p.buyPrice,
+                            sellPrice: Number(editProdSell) || p.sellPrice,
+                            repName: editProdRep,
+                            repPhone: editProdPhone,
+                            piecesPerPacket: Number((document.getElementById('piece_per_packet_edit') as HTMLInputElement)?.value) || p.piecesPerPacket,
+                            stickPrice: Number((document.getElementById('stick_price_edit') as HTMLInputElement)?.value) || p.stickPrice
+                          };
+                        }
+                        return p;
+                      }));
+                      setEditingProduct(null);
+                      setTimeout(handleSync, 500);
+                    }}
+                    className="flex-1 py-2.5 rounded-xl bg-[#1B7A5E] text-white font-bold text-xs shadow hover:bg-[#113F33]"
+                  >
+                    তথ্য সেভ করুন
+                  </button>
+                  <button 
+                    onClick={() => {
+                      if (confirm('আপনি কি নিশ্চিতভাবে এই পণ্যটি মুছে ফেলতে চান?')) {
+                        setProducts(prev => prev.filter(p => p.id !== editingProduct.id));
+                        setEditingProduct(null);
+                        setTimeout(handleSync, 500);
+                      }
+                    }}
+                    className="px-3 py-2.5 rounded-xl bg-red-50 text-red-600 font-bold text-xs"
+                  >
+                    <Trash2 className="w-4 h-4" />
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+
           {/* ================= 4. ACTIVITY LOG SCREEN ================= */}
           {currentTab === 'activity' && (
-            <div className="p-4 space-y-4 animate-fadeIn w-full max-w-5xl mx-auto">
-              <div className="bg-white p-4 rounded-2xl shadow-sm border border-gray-200">
-                <h2 className="font-bold text-lg text-gray-900 mb-4">সাম্প্রতিক কার্যক্রম</h2>
-                <div className="space-y-3">
-                  <div className="text-gray-500 text-sm italic">কার্যক্রমের তালিকা এখানে প্রদর্শিত হবে।</div>
+            <div className="p-2 space-y-3 animate-fadeIn w-full h-full flex flex-col">
+              <div className="bg-white p-4 rounded-2xl shadow-sm border border-emerald-100 flex-1 overflow-y-auto">
+                <div className="flex justify-between items-center mb-4">
+                  <h2 className="font-bold text-lg text-gray-900">আজকের কার্যক্রম (Today's Activity)</h2>
+                </div>
+                
+                <div className="space-y-2">
+                  {(() => {
+                    const todayStr = formatDate(new Date());
+                    
+                    const todaysActivities = activities.filter(a => a.date === todayStr);
+                    
+                    if (todaysActivities.length === 0) {
+                      return (
+                        <div className="text-center py-20">
+                          <Clock className="w-12 h-12 text-gray-200 mx-auto mb-2" />
+                          <div className="text-gray-400 text-sm italic">এখনো কোনো কার্যক্রম নেই</div>
+                        </div>
+                      );
+                    }
+                    
+                    return todaysActivities.map(act => (
+                      <div key={act.id} className="p-3 bg-white rounded-xl border border-emerald-50 flex items-start gap-3 hover:bg-emerald-50/20 transition group">
+                        <div className={`p-2 rounded-xl mt-0.5 ${
+                          act.type === 'sale' ? 'bg-emerald-100 text-emerald-700' : 
+                          act.type === 'stock_in' ? 'bg-blue-100 text-blue-700' :
+                          act.type === 'new_product' ? 'bg-purple-100 text-purple-700' :
+                          'bg-amber-100 text-amber-700'
+                        }`}>
+                          {act.type === 'sale' ? <ShoppingCart className="w-4 h-4" /> : 
+                           act.type === 'stock_in' ? <Plus className="w-4 h-4" /> :
+                           act.type === 'new_product' ? <Package className="w-4 h-4" /> :
+                           <DollarSign className="w-4 h-4" />}
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <div className="flex justify-between items-center mb-0.5">
+                            <span className="font-bold text-xs text-gray-900 truncate">{act.title}</span>
+                            <span className="text-[9px] font-bold text-emerald-700 tabular-nums">{act.amount > 0 ? `${act.amount} ৳` : ''}</span>
+                          </div>
+                          <p className="text-[10px] text-gray-500 line-clamp-1">{act.description}</p>
+                          <div className="flex items-center gap-1.5 mt-1 text-[9px] text-gray-400 font-medium">
+                            <Clock className="w-2.5 h-2.5" />
+                            <span>{act.date} • {new Date(act.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
+                          </div>
+                        </div>
+                      </div>
+                    ));
+                  })()}
                 </div>
               </div>
             </div>
@@ -1143,79 +1450,50 @@ export default function App() {
                 <Search className="w-4 h-4 text-gray-400 absolute left-3 top-3.5" />
                 <input 
                   type="text"
-                  placeholder="গ্রাহকের নাম বা মোবাইল নম্বর দিয়ে খুঁজুন..."
+                  placeholder="ক্রেতার নাম বা মোবাইল নম্বর দিয়ে খুঁজুন..."
                   value={ledgerSearchQuery}
                   onChange={(e) => setLedgerSearchQuery(e.target.value)}
-                  className="w-full pl-9 pr-4 py-2.5 bg-white border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-[#1B7A5E] shadow-sm"
+                  className="w-full pl-9 pr-4 py-2.5 bg-white border border-emerald-100 rounded-xl text-sm focus:outline-none focus:border-[#1B7A5E] shadow-sm"
                 />
               </div>
 
-              {/* Customer Table / Row-wise Layout */}
-              <div className="bg-white rounded-2xl shadow-sm border border-gray-200 overflow-hidden">
-                <div className="p-3 bg-gray-50 border-b border-gray-200 font-bold text-[11px] text-gray-700 grid grid-cols-12 gap-1 items-center">
-                  <div className="col-span-3">গ্রাহকের নাম</div>
-                  <div className="col-span-2">মোবাইল</div>
-                  <div className="col-span-2">ঠিকানা</div>
-                  <div className="col-span-2 text-right">বাকি পরিমাণ</div>
-                  <div className="col-span-1 text-center">স্ট্যাটাস</div>
-                  <div className="col-span-2 text-right">অ্যাকশন</div>
+                <div className="bg-white rounded-2xl shadow-sm border border-emerald-100 overflow-hidden flex-1 flex flex-col w-full">
+                  <div className="p-3 bg-emerald-50/50 border-b border-emerald-100 font-bold text-[10px] text-emerald-900 grid grid-cols-6 gap-2 items-center sticky top-0 z-10 text-center">
+                    <div className="text-left col-span-2">ক্রেতার নাম</div>
+                    <div>মোবাইল</div>
+                    <div className="col-span-2">ঠিকানা</div>
+                    <div>বাকি</div>
+                    <div>অ্যাকশন</div>
+                  </div>
+
+                  <div className="divide-y divide-emerald-50 overflow-y-auto">
+                    {customers
+                      .filter(c => c.dueAmount > 0)
+                      .filter(c => 
+                        c.name.toLowerCase().includes(ledgerSearchQuery.toLowerCase()) || 
+                        c.phone.includes(ledgerSearchQuery) ||
+                        c.address.toLowerCase().includes(ledgerSearchQuery.toLowerCase())
+                      )
+                      .map(customer => (
+                          <div key={customer.id} className="p-3 grid grid-cols-6 gap-2 items-center text-[12px] border-b border-emerald-50 hover:bg-emerald-50/30 transition text-center">
+                            <div className="text-left font-bold text-gray-800 truncate col-span-2">{customer.name}</div>
+                            <div className="text-gray-600 truncate">{customer.phone}</div>
+                            <div className="text-gray-500 truncate col-span-2">{customer.address}</div>
+                            <div className="font-black text-red-600 tabular-nums">
+                              {customer.dueAmount.toLocaleString('en-IN')} ৳
+                            </div>
+                            <div className="flex justify-center">
+                              <button 
+                                onClick={() => { setDepositModalCustomer(customer); setDepositAmountInput(String(customer.dueAmount)); }}
+                                className="px-4 py-2 rounded-xl bg-[#1B7A5E] text-white font-bold text-[11px] shadow-sm active:scale-95 transition hover:bg-[#113F33]"
+                              >
+                                জমা
+                              </button>
+                            </div>
+                          </div>
+                      ))}
+                  </div>
                 </div>
-
-                <div className="divide-y divide-gray-100">
-                  {customers
-                    .filter(c => c.dueAmount > 0)
-                    .filter(c => c.name.toLowerCase().includes(ledgerSearchQuery.toLowerCase()) || c.phone.includes(ledgerSearchQuery))
-                    .map(customer => {
-                      return (
-                        <div 
-                          key={customer.id} 
-                          className="p-2.5 grid grid-cols-12 gap-1 items-center text-xs hover:bg-gray-50 transition"
-                        >
-                          <div className="col-span-3 font-bold text-gray-900 truncate" title={customer.name}>
-                            {customer.name}
-                          </div>
-                          
-                          <div className="col-span-2 text-gray-600 text-[11px] truncate">
-                            {customer.phone}
-                          </div>
-
-                          <div className="col-span-2 text-gray-500 text-[11px] truncate">
-                            {customer.address}
-                          </div>
-
-                          <div className="col-span-2 text-right font-bold text-[#DC2626]">
-                            {customer.dueAmount.toLocaleString('en-IN')} ৳
-                          </div>
-
-                          <div className="col-span-1 text-center">
-                            <span className="px-1.5 py-0.5 rounded-full text-[9px] font-bold bg-[#FEF3C7] text-[#D97706]">
-                              পেন্ডিং
-                            </span>
-                          </div>
-
-                          <div className="col-span-2 flex justify-end gap-1">
-                            <button 
-                              onClick={() => {
-                                setDepositModalCustomer(customer);
-                                setDepositAmountInput(String(customer.dueAmount));
-                              }}
-                              className="px-2 py-1 rounded-lg bg-emerald-50 text-[#1B7A5E] font-bold text-[10px] hover:bg-emerald-100 transition whitespace-nowrap shadow-xs"
-                            >
-                              জমা নিন
-                            </button>
-                            <button 
-                              onClick={() => alert(`${customer.name} (${customer.phone})-কে বাকি পরিশোধের এসএমএস পাঠানো হয়েছে।`)}
-                              className="p-1 rounded-lg bg-gray-100 text-gray-600 hover:bg-gray-200 transition"
-                              title="SMS Reminder"
-                            >
-                              <Send className="w-3 h-3" />
-                            </button>
-                          </div>
-                        </div>
-                      );
-                    })}
-                </div>
-              </div>
 
             </div>
           )}
@@ -1241,89 +1519,52 @@ export default function App() {
               </div>
 
               {/* Menu Options */}
-              <div className="bg-white rounded-2xl shadow-sm border border-gray-200 overflow-hidden divide-y divide-gray-100 text-xs">
-                <button 
-                  onClick={handleInstallClick}
-                  className="w-full p-3.5 flex items-center justify-between hover:bg-amber-50/60 transition text-left border-l-4 border-l-amber-500"
-                >
+              <div className="bg-white rounded-2xl shadow-sm border border-emerald-100 overflow-hidden divide-y divide-emerald-50 text-[11px]">
+                <button onClick={handleInstallClick} className="w-full p-3 flex items-center justify-between hover:bg-amber-50/40 transition-all border-l-4 border-l-amber-500">
                   <div className="flex items-center space-x-3">
                     <Download className="w-4 h-4 text-amber-600" />
-                    <div>
-                      <span className="font-bold text-gray-900 block">মোবাইলে অ্যাপ ইনস্টল করুন (App Install)</span>
-                      <span className="text-[10px] text-gray-500 block">প্লে-স্টোর ছাড়াই সরাসরি হোম-স্ক্রিনে ডাউনলোড</span>
-                    </div>
+                    <span className="font-bold text-gray-800">অ্যাপ ইনস্টল করুন</span>
                   </div>
-                  <span className="text-[10px] bg-amber-100 text-amber-800 font-bold px-2 py-0.5 rounded">
-                    {isInstalled ? 'ইন্সটল করা আছে' : 'ইন্সটল করুন'}
-                  </span>
-                </button>
-                <button 
-                  onClick={() => alert('দোকানের রসিদ প্রিন্টার সফলভাবে সংযুক্ত আছে।')}
-                  className="w-full p-3.5 flex items-center justify-between hover:bg-gray-50 transition text-left"
-                >
-                  <div className="flex items-center space-x-3">
-                    <Printer className="w-4 h-4 text-[#1B7A5E]" />
-                    <span className="font-medium text-gray-800">ব্লুটুথ থার্মাল প্রিন্টার সেটিংস</span>
-                  </div>
-                  <ChevronRight className="w-4 h-4 text-gray-400" />
+                  <span className="text-[8px] bg-amber-100 text-amber-800 font-bold px-1.5 py-0.5 rounded">{isInstalled ? 'ইন্সটলড' : 'ইন্সটল'}</span>
                 </button>
 
-                <button 
-                  onClick={() => setIsCategoryModalOpen(true)}
-                  className="w-full p-3.5 flex items-center justify-between hover:bg-[#1B7A5E]/5 transition text-left"
-                >
+                <button onClick={() => setIsCategoryModalOpen(true)} className="w-full p-3 flex items-center justify-between hover:bg-emerald-50/40 transition-all">
                   <div className="flex items-center space-x-3">
-                    <SlidersHorizontal className="w-4 h-4 text-[#1B7A5E]" />
-                    <span className="font-medium text-gray-800">ক্যাটাগরি ম্যানেজমেন্ট</span>
+                    <SlidersHorizontal className="w-4 h-4 text-emerald-600" />
+                    <span className="font-bold text-gray-800">ক্যাটাগরি ও একক সেটিংস</span>
                   </div>
-                  <ChevronRight className="w-4 h-4 text-gray-400" />
+                  <ChevronRight className="w-4 h-4 text-gray-300" />
                 </button>
 
-                <button 
-                  onClick={() => setIsScriptModalOpen(true)}
-                  className="w-full p-3.5 flex items-center justify-between hover:bg-[#1B7A5E]/5 transition text-left border-l-4 border-l-[#1B7A5E]"
-                >
+                <button onClick={() => setIsScriptModalOpen(true)} className="w-full p-3 flex items-center justify-between hover:bg-emerald-50/40 transition-all border-l-4 border-l-emerald-600">
                   <div className="flex items-center space-x-3">
-                    <FileText className="w-4 h-4 text-[#1B7A5E]" />
-                    <div>
-                      <span className="font-bold text-gray-900 block">গুগল শিট স্ক্রিপ্ট কোড (Google Apps Script)</span>
-                      <span className="text-[10px] text-gray-500 block">bikri, stock, bakir khata, catgeory ট্যাব তৈরির কোড কপির সুবিধা</span>
-                    </div>
+                    <FileText className="w-4 h-4 text-emerald-600" />
+                    <span className="font-bold text-gray-800">গুগল শিট স্ক্রিপ্ট কোড</span>
                   </div>
-                  <ChevronRight className="w-4 h-4 text-[#1B7A5E]" />
+                  <ChevronRight className="w-4 h-4 text-emerald-600" />
                 </button>
 
-                <button 
-                  onClick={() => alert('আজকের বিক্রির রিপোর্ট (PDF) ডাউনলোড হচ্ছে...')}
-                  className="w-full p-3.5 flex items-center justify-between hover:bg-gray-50 transition text-left"
-                >
+                <button onClick={() => alert('Printer Settings')} className="w-full p-3 flex items-center justify-between hover:bg-gray-50 transition-all">
                   <div className="flex items-center space-x-3">
-                    <FileText className="w-4 h-4 text-[#1B7A5E]" />
-                    <span className="font-medium text-gray-800">দৈনিক ও মাসিক হিসাব রিপোর্ট (PDF)</span>
+                    <Printer className="w-4 h-4 text-gray-600" />
+                    <span className="font-medium text-gray-700">ব্লুটুথ প্রিন্টার সেটিংস</span>
                   </div>
-                  <Download className="w-4 h-4 text-gray-400" />
+                  <ChevronRight className="w-4 h-4 text-gray-300" />
                 </button>
 
-                <button 
-                  onClick={() => alert('ডেটা ক্লাউডে সফলভাবে ব্যাকআপ করা হয়েছে।')}
-                  className="w-full p-3.5 flex items-center justify-between hover:bg-gray-50 transition text-left"
-                >
+                <button onClick={() => alert('PDF Report')} className="w-full p-3 flex items-center justify-between hover:bg-gray-50 transition-all">
                   <div className="flex items-center space-x-3">
-                    <RefreshCw className="w-4 h-4 text-[#1B7A5E]" />
-                    <span className="font-medium text-gray-800">ক্লাউড ব্যাকআপ ও সিঙ্ক</span>
+                    <Download className="w-4 h-4 text-gray-600" />
+                    <span className="font-medium text-gray-700">হিসাব রিপোর্ট (PDF)</span>
                   </div>
-                  <span className="text-[10px] bg-emerald-50 text-emerald-700 font-bold px-2 py-0.5 rounded">আপ-টু-ডেট</span>
                 </button>
 
-                <button 
-                  onClick={() => alert(`হেল্পলাইন: ${STORE_PHONE} (সকাল ৮টা - রাত ১০টা)`)}
-                  className="w-full p-3.5 flex items-center justify-between hover:bg-gray-50 transition text-left"
-                >
+                <button onClick={() => alert('Syncing...')} className="w-full p-3 flex items-center justify-between hover:bg-gray-50 transition-all">
                   <div className="flex items-center space-x-3">
-                    <HelpCircle className="w-4 h-4 text-[#1B7A5E]" />
-                    <span className="font-medium text-gray-800">সাহায্য ও সাপোর্ট</span>
+                    <RefreshCw className="w-4 h-4 text-emerald-600" />
+                    <span className="font-medium text-gray-700">ক্লাউড ব্যাকআপ</span>
                   </div>
-                  <ChevronRight className="w-4 h-4 text-gray-400" />
+                  <span className="text-[8px] bg-emerald-100 text-emerald-800 font-bold px-1.5 py-0.5 rounded">লাইভ</span>
                 </button>
               </div>
 
@@ -1360,38 +1601,55 @@ export default function App() {
                 {cart.length === 0 ? (
                   <div className="text-center py-8 text-gray-400 text-xs">কার্ট খালি আছে</div>
                 ) : (
-                  cart.map(item => (
-                    <div key={item.product.id} className="bg-gray-50 p-2.5 rounded-xl border border-gray-200 flex items-center justify-between text-xs">
-                      <div className="min-w-0 flex-1 mr-2">
-                        <div className="font-bold text-gray-900 truncate">{item.product.name}</div>
-                        <div className="text-[10px] text-gray-500">
-                          দর: {item.product.sellPrice} × {item.quantity} {item.product.unit} = <span className="font-bold text-[#113F33]">{item.product.sellPrice * item.quantity}</span>
+                   cart.map(item => {
+                     const hasSticks = !!(item.product.piecesPerPacket && item.product.piecesPerPacket > 0);
+                     const currentPrice = item.isSticks ? (item.product.stickPrice || item.product.sellPrice / item.product.piecesPerPacket!) : item.product.sellPrice;
+                     
+                     return (
+                      <div key={item.product.id} className="bg-gray-50 p-2.5 rounded-xl border border-emerald-100 flex items-center justify-between text-xs">
+                        <div className="min-w-0 flex-1 mr-2">
+                          <div className="font-bold text-gray-900 truncate">{item.product.name}</div>
+                          <div className="flex items-center gap-2 mt-0.5">
+                            <div className="text-[10px] text-gray-500">
+                              দর: {currentPrice.toFixed(1)} × {item.quantity} {item.isSticks ? 'শলাকা' : item.product.unit} = <span className="font-bold text-[#113F33]">{(currentPrice * item.quantity).toFixed(0)}</span>
+                            </div>
+                            {hasSticks && (
+                              <button 
+                                onClick={() => {
+                                  setCart(prev => prev.map(i => i.product.id === item.product.id ? { ...i, isSticks: !i.isSticks } : i));
+                                }}
+                                className={`px-1.5 py-0.5 rounded text-[9px] font-bold transition ${item.isSticks ? 'bg-amber-100 text-amber-700' : 'bg-blue-100 text-blue-700'}`}
+                              >
+                                {item.isSticks ? 'প্যাকেট করুন' : 'শলাকা করুন'}
+                              </button>
+                            )}
+                          </div>
+                        </div>
+
+                        <div className="flex items-center space-x-1.5 flex-shrink-0">
+                          <button 
+                            onClick={() => updateCartQuantity(item.product.id, -1)}
+                            className="w-6 h-6 rounded-lg bg-white border border-gray-200 text-gray-600 font-bold flex items-center justify-center hover:bg-gray-100"
+                          >
+                            <Minus className="w-3 h-3" />
+                          </button>
+                          <span className="font-bold text-xs text-gray-900 w-5 text-center">{item.quantity}</span>
+                          <button 
+                            onClick={() => updateCartQuantity(item.product.id, 1)}
+                            className="w-6 h-6 rounded-lg bg-[#1B7A5E] text-white font-bold flex items-center justify-center hover:bg-[#113F33]"
+                          >
+                            <Plus className="w-3 h-3" />
+                          </button>
+                          <button 
+                            onClick={() => removeFromCart(item.product.id)}
+                            className="w-6 h-6 rounded-lg text-red-500 hover:bg-red-50 flex items-center justify-center ml-1"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
                         </div>
                       </div>
-
-                      <div className="flex items-center space-x-1.5 flex-shrink-0">
-                        <button 
-                          onClick={() => updateCartQuantity(item.product.id, -1)}
-                          className="w-6 h-6 rounded-lg bg-white border border-gray-200 text-gray-600 font-bold flex items-center justify-center hover:bg-gray-100"
-                        >
-                          <Minus className="w-3 h-3" />
-                        </button>
-                        <span className="font-bold text-xs text-gray-900 w-5 text-center">{item.quantity}</span>
-                        <button 
-                          onClick={() => updateCartQuantity(item.product.id, 1)}
-                          className="w-6 h-6 rounded-lg bg-[#1B7A5E] text-white font-bold flex items-center justify-center hover:bg-[#113F33]"
-                        >
-                          <Plus className="w-3 h-3" />
-                        </button>
-                        <button 
-                          onClick={() => removeFromCart(item.product.id)}
-                          className="w-6 h-6 rounded-lg text-red-500 hover:bg-red-50 flex items-center justify-center ml-1"
-                        >
-                          <Trash2 className="w-3.5 h-3.5" />
-                        </button>
-                      </div>
-                    </div>
-                  ))
+                     );
+                   })
                 )}
               </div>
 
@@ -1584,8 +1842,10 @@ export default function App() {
                       }
                       return c;
                     }));
+                    logActivity('payment', `টাকা জমা: ${depositModalCustomer.name}`, `${amt} ৳ (${depositMethod === 'cash' ? 'নগদ' : 'বিকাশ'}) জমা দেওয়া হয়েছে।`, amt);
                     alert(`সফলভাবে ${depositModalCustomer.name}-এর কাছ থেকে ${amt} (${depositMethod === 'cash' ? 'নগদ' : 'বিকাশ'}) জমা নেওয়া হয়েছে।`);
                     setDepositModalCustomer(null);
+                    setTimeout(handleSync, 500);
                   }}
                   className="flex-1 py-2.5 rounded-xl bg-[#1B7A5E] text-white font-bold text-xs shadow hover:bg-[#113F33]"
                 >
@@ -1625,7 +1885,7 @@ export default function App() {
                     <span>{printPreviewOrder.date}</span>
                   </div>
                   <div className="flex justify-between">
-                    <span>গ্রাহক: {printPreviewOrder.customerName}</span>
+                    <span>ক্রেতা: {printPreviewOrder.customerName}</span>
                     <span>মোবাইল: {printPreviewOrder.customerPhone}</span>
                   </div>
                 </div>
@@ -1689,9 +1949,11 @@ export default function App() {
                 </button>
                 <button 
                   onClick={handleConfirmAndSubmitSale}
-                  className="py-2.5 rounded-xl bg-[#1B7A5E] text-white font-bold text-xs flex items-center justify-center gap-1 shadow hover:bg-[#113F33] transition"
+                  disabled={isSubmittingSale}
+                  className={`py-2.5 rounded-xl bg-[#1B7A5E] text-white font-bold text-xs flex items-center justify-center gap-1 shadow hover:bg-[#113F33] transition ${isSubmittingSale ? 'opacity-50 cursor-not-allowed' : ''}`}
                 >
-                  <Check className="w-4 h-4" /> সাবমিট করুন
+                  <Check className={`w-4 h-4 ${isSubmittingSale ? 'animate-spin' : ''}`} /> 
+                  {isSubmittingSale ? 'প্রসেসিং...' : 'সাবমিট করুন'}
                 </button>
               </div>
 
@@ -1713,7 +1975,7 @@ export default function App() {
 
               <div className="bg-gray-50 p-3 rounded-2xl space-y-1.5 text-xs border border-gray-100">
                 <div className="flex justify-between">
-                  <span className="text-gray-500">গ্রাহক:</span>
+                  <span className="text-gray-500">ক্রেতা:</span>
                   <span className="font-bold text-gray-900">{successModal.customerName}</span>
                 </div>
                 <div className="flex justify-between">
@@ -1764,7 +2026,9 @@ export default function App() {
 function doGet(e) { return handleRequest(e); }
 
 function handleRequest(e) {
+  var lock = LockService.getScriptLock();
   try {
+    lock.waitLock(30000); 
     var ss = SpreadsheetApp.getActiveSpreadsheet();
     var data = {};
     if (e && e.parameter && e.parameter.data) {
@@ -1774,72 +2038,87 @@ function handleRequest(e) {
       try { data = JSON.parse(e.postData.contents); } catch(err) {}
     }
 
-    // 1. Tab: bikri
+    var syncTime = data.timestamp || new Date().toISOString();
+
+    // 1. Tab: bikri (Append only with strict duplicate check)
     var bikriSheet = ss.getSheetByName('bikri') || ss.insertSheet('bikri');
-    var bikriHeaders = ['invoice no', 'date', 'customer name', 'customer mobile', 'location', 'product name', 'category', 'cost', 'sales', 'discount', 'baki', 'payment method', 'profit'];
-    if (bikriSheet.getLastRow() === 0 || bikriSheet.getRange(1, 3).getValue() !== 'customer name') {
-      bikriSheet.clear();
-      bikriSheet.getRange(1, 1, 1, 13).setValues([bikriHeaders]);
+    if (bikriSheet.getLastRow() === 0) {
+      bikriSheet.appendRow(['invoice no', 'date', 'customer name', 'customer mobile', 'location', 'product name', 'category', 'cost', 'sales', 'discount', 'baki', 'payment method', 'profit', 'datetime']);
     }
     if (data && data.bikri && data.bikri.length > 0) {
       var existingData = bikriSheet.getDataRange().getValues();
       var existingKeys = {};
       for (var x = 1; x < existingData.length; x++) {
-        var key = (existingData[x][0] || '') + '_' + (existingData[x][5] || '');
-        existingKeys[key] = true;
+        var inv = String(existingData[x][0] || '').trim();
+        var prod = String(existingData[x][5] || '').trim();
+        existingKeys[inv + '_' + prod] = true;
       }
       data.bikri.forEach(function(r) {
-        var invNo = r['invoice no'] || r['invoice_no'] || '';
-        var pName = r['product name'] || r['product_name'] || '';
-        var rowKey = invNo + '_' + pName;
-        if (!existingKeys[rowKey]) {
-          bikriSheet.appendRow([invNo, r['date']||'', r['customer name']||r['customer_name']||'নগদ ক্রেতা', r['customer mobile']||r['customer_mobile']||'-', r['location']||r['address']||'রায়পুর বাজার', pName, r['category']||'', r['cost']||0, r['sales']||0, r['discount']||0, r['baki']||0, r['payment method']||'', r['profit']||0]);
+        var invNo = String(r['invoice no'] || r['invoice_no'] || '').trim();
+        var rowKey = invNo;
+        if (invNo && !existingKeys[rowKey]) {
+          bikriSheet.appendRow([invNo, r['date']||'', r['customer name']||'নগদ ক্রেতা', r['customer mobile']||'-', r['location']||'রায়পুর বাজার', r['product name']||'', r['category']||'', r['cost']||0, r['sales']||0, r['discount']||0, r['baki']||0, r['payment method']||'', r['profit']||0, r['datetime'] || syncTime]);
           existingKeys[rowKey] = true;
         }
       });
     }
 
-    // 2. Tab: stock
+    // 2. Tab: stock (Overwrite current inventory)
     var stockSheet = ss.getSheetByName('stock') || ss.insertSheet('stock');
-    stockSheet.clearContents();
-    stockSheet.appendRow(['id', 'name', 'category', 'stock', 'unit', 'buyPrice', 'sellPrice', 'barcode', 'repName', 'repPhone']);
     if (data && data.stock && data.stock.length > 0) {
-      data.stock.forEach(function(p) {
-        stockSheet.appendRow([p.id||'', p.name||'', p.category||'', p.stock||0, p.unit||'', p.buyPrice||0, p.sellPrice||0, p.barcode||'', p.repName||'', p.repPhone||'']);
-      });
+        stockSheet.clear();
+        stockSheet.appendRow(['id', 'name', 'category', 'stock', 'unit', 'buyPrice', 'sellPrice', 'barcode', 'repName', 'repPhone', 'datetime']);
+        var stockRows = data.stock.map(function(p) {
+          return [p.id||'', p.name||'', p.category||'', p.stock||0, p.unit||'', p.buyPrice||0, p.sellPrice||0, p.barcode||'', p.repName||'', p.repPhone||'', p.datetime || syncTime];
+        });
+        stockSheet.getRange(2, 1, stockRows.length, 11).setValues(stockRows);
     }
 
-    // 3. Tab: bakir khata
+    // 3. Tab: bakir khata (Overwrite current customer balances)
     var bakiSheet = ss.getSheetByName('bakir khata') || ss.insertSheet('bakir khata');
-    bakiSheet.clearContents();
-    bakiSheet.appendRow(['id', 'name', 'phone', 'address', 'dueAmount', 'lastPurchaseDate', 'status']);
     if (data && data['bakir khata'] && data['bakir khata'].length > 0) {
-      data['bakir khata'].forEach(function(c) {
-        bakiSheet.appendRow([c.id||'', c.name||'', c.phone||'', c.address||'', c.dueAmount||0, c.lastPurchaseDate||'', c.status||'']);
-      });
+        bakiSheet.clear();
+        bakiSheet.appendRow(['id', 'name', 'phone', 'address', 'dueAmount', 'lastPurchaseDate', 'status', 'datetime']);
+        var bakiRows = data['bakir khata'].map(function(c) {
+          return [c.id||'', c.name||'', c.phone||'', c.address||'', c.dueAmount||0, c.lastPurchaseDate||'', c.status||'', c.datetime || syncTime];
+        });
+        bakiSheet.getRange(2, 1, bakiRows.length, 8).setValues(bakiRows);
     }
 
-    // 4. Tab: catgeory
+    // 4. Tab: catgeory (Overwrite)
     var catSheet = ss.getSheetByName('catgeory') || ss.insertSheet('catgeory');
-    catSheet.clearContents();
-    catSheet.appendRow(['category_name']);
     if (data && data.catgeory && data.catgeory.length > 0) {
-      data.catgeory.forEach(function(cat) {
-        catSheet.appendRow([cat]);
-      });
+      catSheet.clear();
+      catSheet.appendRow(['category_name', 'datetime']);
+      var catRows = data.catgeory.map(function(cat) { return [cat.category_name || cat, cat.datetime || syncTime]; });
+      catSheet.getRange(2, 1, catRows.length, 2).setValues(catRows);
     }
 
-    return ContentService.createTextOutput(JSON.stringify({ success: true, message: 'Synced successfully' })).setMimeType(ContentService.MimeType.JSON);
+    // 5. Tab: units (Overwrite)
+    var unitsSheet = ss.getSheetByName('units') || ss.insertSheet('units');
+    if (data && data.units && data.units.length > 0) {
+      unitsSheet.clear();
+      unitsSheet.appendRow(['unit_name', 'datetime']);
+      var unitRows = data.units.map(function(u) { return [u.unit_name || u, u.datetime || syncTime]; });
+      unitsSheet.getRange(2, 1, unitRows.length, 2).setValues(unitRows);
+    }
+
+    return ContentService.createTextOutput(JSON.stringify({ success: true })).setMimeType(ContentService.MimeType.JSON);
   } catch (err) {
     return ContentService.createTextOutput(JSON.stringify({ success: false, error: err.toString() })).setMimeType(ContentService.MimeType.JSON);
+  } finally {
+    lock.releaseLock();
   }
+}
+
 }`}</pre>
               </div>
 
               <div className="flex gap-2 pt-1">
                 <button 
-                  onClick={() => {
-                    navigator.clipboard.writeText(`function doPost(e) { return handleRequest(e); }\nfunction doGet(e) { return handleRequest(e); }\n\nfunction handleRequest(e) {\n  try {\n    var ss = SpreadsheetApp.getActiveSpreadsheet();\n    var data = {};\n    if (e && e.parameter && e.parameter.data) {\n      try { data = JSON.parse(e.parameter.data); } catch(err) {}\n    }\n    if ((!data || !data.bikri) && e && e.postData && e.postData.contents) {\n      try { data = JSON.parse(e.postData.contents); } catch(err) {}\n    }\n\n    var bikriSheet = ss.getSheetByName('bikri') || ss.insertSheet('bikri');\n    bikriSheet.clearContents();\n    bikriSheet.appendRow(['invoice no', 'date', 'customer name', 'customer mobile', 'location', 'product name', 'category', 'cost', 'sales', 'discount', 'baki', 'payment method', 'profit']);\n    if (data && data.bikri && data.bikri.length > 0) {\n      data.bikri.forEach(function(r) {\n        bikriSheet.appendRow([r['invoice no']||'', r['date']||'', r['customer name']||'', r['customer mobile']||'', r['location']||'', r['product name']||'', r['category']||'', r['cost']||0, r['sales']||0, r['discount']||0, r['baki']||0, r['payment method']||'', r['profit']||0]);\n      });\n    }\n\n    var stockSheet = ss.getSheetByName('stock') || ss.insertSheet('stock');\n    stockSheet.clearContents();\n    stockSheet.appendRow(['id', 'name', 'category', 'stock', 'unit', 'buyPrice', 'sellPrice', 'barcode', 'repName', 'repPhone']);\n    if (data && data.stock && data.stock.length > 0) {\n      data.stock.forEach(function(p) {\n        stockSheet.appendRow([p.id||'', p.name||'', p.category||'', p.stock||0, p.unit||'', p.buyPrice||0, p.sellPrice||0, p.barcode||'', p.repName||'', p.repPhone||'']);\n      });\n    }\n\n    var bakiSheet = ss.getSheetByName('bakir khata') || ss.insertSheet('bakir khata');\n    bakiSheet.clearContents();\n    bakiSheet.appendRow(['id', 'name', 'phone', 'address', 'dueAmount', 'lastPurchaseDate', 'status']);\n    if (data && data['bakir khata'] && data['bakir khata'].length > 0) {\n      data['bakir khata'].forEach(function(c) {\n        bakiSheet.appendRow([c.id||'', c.name||'', c.phone||'', c.address||'', c.dueAmount||0, c.lastPurchaseDate||'', c.status||'']);\n      });\n    }\n\n    var catSheet = ss.getSheetByName('catgeory') || ss.insertSheet('catgeory');\n    catSheet.clearContents();\n    catSheet.appendRow(['category_name']);\n    if (data && data.catgeory && data.catgeory.length > 0) {\n      data.catgeory.forEach(function(cat) {\n        catSheet.appendRow([cat]);\n      });\n    }\n\n    return ContentService.createTextOutput(JSON.stringify({ success: true, message: 'Synced successfully' })).setMimeType(ContentService.MimeType.JSON);\n  } catch (err) {\n    return ContentService.createTextOutput(JSON.stringify({ success: false, error: err.toString() })).setMimeType(ContentService.MimeType.JSON);\n  }\n}`);
+                   onClick={() => {
+                    const scriptCode = `function doPost(e) { return handleRequest(e); }\nfunction doGet(e) { return handleRequest(e); }\n\nfunction handleRequest(e) {\n  var lock = LockService.getScriptLock();\n  try {\n    lock.waitLock(30000);\n    var ss = SpreadsheetApp.getActiveSpreadsheet();\n    var data = {};\n    if (e && e.parameter && e.parameter.data) {\n      try { data = JSON.parse(e.parameter.data); } catch(err) {}\n    }\n    if ((!data || !data.bikri) && e && e.postData && e.postData.contents) {\n      try { data = JSON.parse(e.postData.contents); } catch(err) {}\n    }\n    var syncTime = data.timestamp || new Date().toISOString();\n\n    var bikriSheet = ss.getSheetByName('bikri') || ss.insertSheet('bikri');\n    if(bikriSheet.getLastRow() === 0) bikriSheet.appendRow(['invoice no', 'date', 'customer name', 'customer mobile', 'location', 'product name', 'category', 'cost', 'sales', 'discount', 'baki', 'payment method', 'profit', 'datetime']);\n    if (data && data.bikri && data.bikri.length > 0) {\n      var existingData = bikriSheet.getDataRange().getValues();\n      var existingKeys = {};\n      for(var x=1; x<existingData.length; x++) {\n        var inv = (existingData[x][0] || '').toString().trim();\n        existingKeys[inv] = true;\n      }\n      data.bikri.forEach(function(r) {\n        var invNo = (r['invoice no'] || r['invoice_no'] || '').toString().trim();\n        var rowKey = invNo;\n        if (invNo && !existingKeys[rowKey]) {\n            bikriSheet.appendRow([invNo, r['date']||'', r['customer name']||'', r['customer mobile']||'', r['location']||'', r['product name']||'', r['category']||'', r['cost']||0, r['sales']||0, r['discount']||0, r['baki']||0, r['payment method']||'', r['profit']||0, r['datetime'] || syncTime]);\n            existingKeys[rowKey] = true;\n        }\n      });\n    }\n\n    var stockSheet = ss.getSheetByName('stock') || ss.insertSheet('stock');\n    if (data && data.stock && data.stock.length > 0) {\n        stockSheet.clear();\n        stockSheet.getRange(1, 1, 1, 11).setValues([['id', 'name', 'category', 'stock', 'unit', 'buyPrice', 'sellPrice', 'barcode', 'repName', 'repPhone', 'datetime']]);\n        var stockRows = data.stock.map(function(p) { return [p.id||'', p.name||'', p.category||'', p.stock||0, p.unit||'', p.buyPrice||0, p.sellPrice||0, p.barcode||'', p.repName||'', p.repPhone||'', p.datetime || syncTime]; });\n        stockSheet.getRange(2, 1, stockRows.length, 11).setValues(stockRows);\n    }\n\n    var bakiSheet = ss.getSheetByName('bakir khata') || ss.insertSheet('bakir khata');\n    if (data && data['bakir khata'] && data['bakir khata'].length > 0) {\n        bakiSheet.clear();\n        bakiSheet.getRange(1, 1, 1, 8).setValues([['id', 'name', 'phone', 'address', 'dueAmount', 'lastPurchaseDate', 'status', 'datetime']]);\n        var bakiRows = data['bakir khata'].map(function(c) { return [c.id||'', c.name||'', c.phone||'', c.address||'', c.dueAmount||0, c.lastPurchaseDate||'', c.status||'', c.datetime || syncTime]; });\n        bakiSheet.getRange(2, 1, bakiRows.length, 8).setValues(bakiRows);\n    }\n\n    var catSheet = ss.getSheetByName('catgeory') || ss.insertSheet('catgeory');\n    if (data && data.catgeory && data.catgeory.length > 0) {\n      catSheet.clear();\n      catSheet.getRange(1, 1, 1, 2).setValues([['category_name', 'datetime']]);\n      var catRows = data.catgeory.map(function(cat) { return [cat.category_name || cat, cat.datetime || syncTime]; });\n      catSheet.getRange(2, 1, catRows.length, 2).setValues(catRows);\n    }\n\n    var unitsSheet = ss.getSheetByName('units') || ss.insertSheet('units');\n    if (data && data.units && data.units.length > 0) {\n      unitsSheet.clear();\n      unitsSheet.getRange(1, 1, 1, 2).setValues([['unit_name', 'datetime']]);\n      var unitRows = data.units.map(function(u) { return [u.unit_name || u, u.datetime || syncTime]; });\n      unitsSheet.getRange(2, 1, unitRows.length, 2).setValues(unitRows);\n    }\n\n    return ContentService.createTextOutput(JSON.stringify({ success: true, message: 'Synced successfully' })).setMimeType(ContentService.MimeType.JSON);\n  } catch (err) {\n    return ContentService.createTextOutput(JSON.stringify({ success: false, error: err.toString() })).setMimeType(ContentService.MimeType.JSON);\n  } finally {\n    lock.releaseLock();\n  }\n}`;
+                    navigator.clipboard.writeText(scriptCode);
                     alert('কোড কপি করা হয়েছে!');
                   }}
                   className="flex-1 py-2 rounded-xl bg-[#1B7A5E] text-white font-bold text-xs shadow hover:bg-[#113F33] transition"
@@ -1929,39 +2208,37 @@ function handleRequest(e) {
                 <button onClick={() => { setIsCategoryModalOpen(false); handleSync(); }} className="text-gray-400 hover:text-gray-600"><X className="w-4 h-4" /></button>
               </div>
               
-              <div className="space-y-4">
-                <div className="space-y-2">
-                  <h4 className="text-xs font-bold text-gray-600">ক্যাটাগরি</h4>
-                  <div className="flex gap-2">
-                    <input type="text" value={newCatInput} onChange={(e) => setNewCatInput(e.target.value)} placeholder="নতুন ক্যাটাগরি..." className="flex-1 px-3 py-2 bg-gray-50 border border-gray-200 rounded-xl text-xs" />
-                    <button onClick={() => { if(newCatInput && !categoriesList.includes(newCatInput)) { setCategoriesList([...categoriesList, newCatInput]); setNewCatInput(''); } }} className="px-3 py-2 bg-[#1B7A5E] text-white rounded-xl text-xs font-bold">যোগ</button>
+                {/* Categories */}
+                  <div className="space-y-2">
+                    <div className="flex gap-2">
+                      <input type="text" value={newCatInput} onChange={(e) => setNewCatInput(e.target.value)} placeholder="নতুন ক্যাটাগরি..." className="flex-1 px-3 py-2 bg-gray-50 border border-gray-200 rounded-xl text-xs" />
+                      <button onClick={() => { if(newCatInput && !categoriesList.includes(newCatInput)) { setCategoriesList([...categoriesList, newCatInput]); setNewCatInput(''); setTimeout(handleSync, 500); } }} className="px-3 py-2 bg-[#1B7A5E] text-white rounded-xl text-xs font-bold">যোগ</button>
+                    </div>
+                    <div className="flex flex-wrap gap-1 max-h-20 overflow-y-auto">
+                      {categoriesList.map(cat => (
+                        <span key={cat} className="flex items-center gap-1 p-2 bg-gray-50 rounded-lg text-xs">
+                          {cat}
+                          <button onClick={() => { setCategoriesList(categoriesList.filter(c => c !== cat)); setTimeout(handleSync, 500); }} className="text-red-500"><Trash2 className="w-3 h-3" /></button>
+                        </span>
+                      ))}
+                    </div>
                   </div>
-                  <div className="flex flex-wrap gap-1">
-                    {categoriesList.map(cat => (
-                      <span key={cat} className="flex items-center gap-1 p-2 bg-gray-50 rounded-lg text-xs">
-                        {cat}
-                        <button onClick={() => setCategoriesList(categoriesList.filter(c => c !== cat))} className="text-red-500"><Trash2 className="w-3 h-3" /></button>
-                      </span>
-                    ))}
+                  
+                  {/* Units */}
+                  <div className="space-y-2 pt-2 border-t border-gray-100">
+                    <div className="flex gap-2">
+                      <input type="text" value={newUnitInput} onChange={(e) => setNewUnitInput(e.target.value)} placeholder="নতুন একক..." className="flex-1 px-3 py-2 bg-gray-50 border border-gray-200 rounded-xl text-xs" />
+                      <button onClick={() => { if(newUnitInput && !unitsList.includes(newUnitInput)) { setUnitsList([...unitsList, newUnitInput]); setNewUnitInput(''); setTimeout(handleSync, 500); } }} className="px-3 py-2 bg-[#1B7A5E] text-white rounded-xl text-xs font-bold">যোগ</button>
+                    </div>
+                    <div className="flex flex-wrap gap-1 max-h-20 overflow-y-auto">
+                      {unitsList.map(u => (
+                        <span key={u} className="flex items-center gap-1 p-2 bg-gray-50 rounded-lg text-xs">
+                          {u}
+                          <button onClick={() => { setUnitsList(unitsList.filter(unit => unit !== u)); setTimeout(handleSync, 500); }} className="text-red-500"><Trash2 className="w-3 h-3" /></button>
+                        </span>
+                      ))}
+                    </div>
                   </div>
-                </div>
-
-                <div className="space-y-2 pt-2 border-t border-gray-100">
-                  <h4 className="text-xs font-bold text-gray-600">একক (Unit)</h4>
-                  <div className="flex gap-2">
-                    <input type="text" value={newUnitInput} onChange={(e) => setNewUnitInput(e.target.value)} placeholder="নতুন একক..." className="flex-1 px-3 py-2 bg-gray-50 border border-gray-200 rounded-xl text-xs" />
-                    <button onClick={() => { if(newUnitInput && !unitsList.includes(newUnitInput)) { setUnitsList([...unitsList, newUnitInput]); setNewUnitInput(''); } }} className="px-3 py-2 bg-[#1B7A5E] text-white rounded-xl text-xs font-bold">যোগ</button>
-                  </div>
-                  <div className="flex flex-wrap gap-1">
-                    {unitsList.map(u => (
-                      <span key={u} className="flex items-center gap-1 p-2 bg-gray-50 rounded-lg text-xs">
-                        {u}
-                        <button onClick={() => setUnitsList(unitsList.filter(unit => unit !== u))} className="text-red-500"><Trash2 className="w-3 h-3" /></button>
-                      </span>
-                    ))}
-                  </div>
-                </div>
-              </div>
             </div>
           </div>
         )}

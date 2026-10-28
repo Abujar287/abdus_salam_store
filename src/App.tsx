@@ -50,6 +50,7 @@ import {
 const STORE_NAME = 'আব্দুস সালাম স্টোর';
 const STORE_PHONE = '01969249225';
 const STORE_ADDRESS = 'রায়পুর বাজার, বাঘারপাড়া, যশোর';
+const SHEET_URL = 'https://script.google.com/macros/s/AKfycbx6qXyoYua4tUchRlaa0mH78EXxgbvmRWmVpWfxv5v4_At4_QGvwS13H8ruZf1J3bGBeA/exec';
 
 /// Types
 interface Product {
@@ -130,6 +131,30 @@ export default function App() {
     const month = monthNames[date.getMonth()];
     const year = date.getFullYear().toString().slice(-2);
     return `${day}-${month}-${year}`;
+  };
+
+  const formatDateTime = (date: Date) => {
+    // Universal format for Sheets: YYYY-MM-DD HH:mm:ss
+    const y = date.getFullYear();
+    const m = String(date.getMonth() + 1).padStart(2, '0');
+    const d = String(date.getDate()).padStart(2, '0');
+    const h = String(date.getHours()).padStart(2, '0');
+    const min = String(date.getMinutes()).padStart(2, '0');
+    const s = String(date.getSeconds()).padStart(2, '0');
+    return `${y}-${m}-${d} ${h}:${min}:${s}`;
+  };
+
+  const getSyncDisplayTime = (date: Date) => {
+    const day = date.getDate();
+    const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    const month = monthNames[date.getMonth()];
+    const year = date.getFullYear().toString().slice(-2);
+    let hours = date.getHours();
+    const minutes = date.getMinutes() < 10 ? `0${date.getMinutes()}` : date.getMinutes();
+    const ampm = hours >= 12 ? 'PM' : 'AM';
+    hours = hours % 12;
+    hours = hours ? hours : 12;
+    return `Sync: ${day}-${month}-${year} ${hours}:${minutes}${ampm}`;
   };
 
   const [currentTab, setCurrentTab] = useState<'home' | 'pos' | 'stock' | 'ledger' | 'activity' | 'more'>('home');
@@ -235,19 +260,7 @@ export default function App() {
   const [depositAmountInput, setDepositAmountInput] = useState<string>('');
   const [depositMethod, setDepositMethod] = useState<'cash' | 'bkash'>('cash');
 
-  const [syncTime, setSyncTime] = useState<string>(() => {
-    const now = new Date();
-    const day = now.getDate();
-    const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-    const month = monthNames[now.getMonth()];
-    const year = now.getFullYear();
-    let hours = now.getHours();
-    const minutes = now.getMinutes() < 10 ? `0${now.getMinutes()}` : now.getMinutes();
-    const ampm = hours >= 12 ? 'PM' : 'AM';
-    hours = hours % 12;
-    hours = hours ? hours : 12;
-    return `Sync: ${day}-${month}-${year.toString().slice(-2)} ${hours}:${minutes}${ampm}`;
-  });
+  const [syncTime, setSyncTime] = useState<string>(() => getSyncDisplayTime(new Date()));
   const [isSyncing, setIsSyncing] = useState<boolean>(false);
   const [isScriptModalOpen, setIsScriptModalOpen] = useState<boolean>(false);
   const [isCategoryModalOpen, setIsCategoryModalOpen] = useState<boolean>(false);
@@ -296,9 +309,7 @@ export default function App() {
     }
   }, []);
 
-  const [sheetUrl, setSheetUrl] = useState<string>(() => {
-    return localStorage.getItem('google_sheet_url') || 'https://script.google.com/macros/s/AKfycbx6qXyoYua4tUchRlaa0mH78EXxgbvmRWmVpWfxv5v4_At4_QGvwS13H8ruZf1J3bGBeA/exec';
-  });
+  const [sheetUrl] = useState<string>(SHEET_URL);
 
   // Save to LocalStorage whenever state changes
   useEffect(() => {
@@ -329,90 +340,14 @@ export default function App() {
     localStorage.setItem('google_sheet_url', sheetUrl);
   }, [sheetUrl]);
 
-  const handleSync = async (
-    targetOrders = orders, 
-    targetProducts = products, 
-    targetCustomers = customers,
-    targetCategories = categoriesList,
-    targetUnits = unitsList
-  ) => {
-    if (isSyncing) return;
-    setIsSyncing(true);
-    try {
-      const formattedBikri = targetOrders.map(o => {
-        const custObj = targetCustomers.find(c => c.name === o.customerName);
-        const custLoc = custObj ? custObj.address : 'রায়পুর বাজার';
-        
-        const productSummary = o.items && o.items.length > 0 
-          ? o.items.map(item => `${item.product.name} - ${item.quantity} ${item.isSticks ? 'শলাকা' : item.product.unit}`).join(', ')
-          : 'বিক্রিত পণ্য';
-
-        const totalCost = o.items ? o.items.reduce((sum, item) => sum + (item.product.buyPrice * item.quantity), 0) : 0;
-        const totalProfit = o.items ? o.items.reduce((sum, item) => {
-          const price = item.isSticks ? (item.product.stickPrice || item.product.sellPrice / (item.product.piecesPerPacket || 1)) : item.product.sellPrice;
-          return sum + ((price - item.product.buyPrice) * item.quantity);
-        }, 0) : 0;
-
-        return {
-          'invoice no': String(o.invoiceNo).trim(),
-          'date': o.date,
-          'customer name': String(o.customerName).trim(),
-          'customer mobile': String(o.customerPhone).trim(),
-          'location': custLoc,
-          'product name': productSummary,
-          'category': (o.items && o.items[0]) ? o.items[0].product.category : 'অন্যান্য',
-          'cost': totalCost,
-          'sales': o.total,
-          'discount': o.discount || 0,
-          'baki': o.due,
-          'payment method': o.paymentType,
-          'profit': totalProfit,
-          'datetime': new Date().toISOString().replace('T', ' ').split('.')[0]
-        };
-      });
-
-      const payload = {
-        action: 'syncData',
-        tabs: ['bikri', 'stock', 'bakir khata', 'catgeory', 'units'],
-        bikri: formattedBikri,
-        stock: targetProducts.map(p => ({ ...p, datetime: new Date().toISOString().replace('T', ' ').split('.')[0] })),
-        'bakir khata': targetCustomers.map(c => ({ ...c, datetime: new Date().toISOString().replace('T', ' ').split('.')[0] })),
-        catgeory: targetCategories.map(cat => ({ category_name: cat, datetime: new Date().toISOString().replace('T', ' ').split('.')[0] })),
-        units: targetUnits.map(u => ({ unit_name: u, datetime: new Date().toISOString().replace('T', ' ').split('.')[0] })),
-        timestamp: new Date().toISOString()
-      };
-
-      await fetch(sheetUrl, {
-        method: 'POST',
-        mode: 'no-cors',
-        headers: { 'Content-Type': 'text/plain' },
-        body: JSON.stringify(payload)
-      });
-
-    } catch (err) {
-      console.error("Sync error:", err);
-    } finally {
-      setIsSyncing(false);
-      const now = new Date();
-      const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-      const day = now.getDate();
-      const month = monthNames[now.getMonth()];
-      const year = now.getFullYear();
-      let hours = now.getHours();
-      const minutes = now.getMinutes() < 10 ? `0${now.getMinutes()}` : now.getMinutes();
-      const ampm = hours >= 12 ? 'PM' : 'AM';
-      hours = hours % 12;
-      hours = hours ? hours : 12;
-      const newSyncStr = `Sync: ${day}-${month}-${year.toString().slice(-2)} ${hours}:${minutes}${ampm}`;
-      setSyncTime(newSyncStr);
-    }
-  };
-
   const fetchData = async () => {
     if (isSyncing) return;
     setIsSyncing(true);
     try {
-      const response = await fetch(`${sheetUrl}?action=getData`);
+      const response = await fetch(`${sheetUrl}?action=getData`, {
+        method: 'GET',
+        headers: { 'Accept': 'application/json' }
+      });
       const result = await response.json();
       
       if (result.success) {
@@ -461,15 +396,16 @@ export default function App() {
             status: Number(o.baki) > 0 ? 'pending' : 'completed'
           }));
           
-          setOrders(prev => {
-            const existingInvoices = new Set(prev.map(p => p.invoiceNo));
-            const newOrders = fetchedOrders.filter((fo: any) => !existingInvoices.has(fo.invoiceNo));
-            return [...prev, ...newOrders].sort((a, b) => b.invoiceNo.localeCompare(a.invoiceNo));
-          });
+          // Overwrite with sheet data for perfect sync
+          setOrders(fetchedOrders.sort((a, b) => b.invoiceNo.localeCompare(a.invoiceNo)));
         }
+        return true;
+      } else {
+        throw new Error(result.error || "Unknown error");
       }
     } catch (err) {
       console.error("Fetch data error:", err);
+      return false;
     } finally {
       setIsSyncing(false);
     }
@@ -478,6 +414,76 @@ export default function App() {
   useEffect(() => {
     fetchData();
   }, []);
+
+  const handleSync = async (
+    targetOrders = orders, 
+    targetProducts = products, 
+    targetCustomers = customers,
+    targetCategories = categoriesList,
+    targetUnits = unitsList
+  ) => {
+    if (isSyncing) return;
+    setIsSyncing(true);
+    try {
+      const formattedBikri = targetOrders.map(o => {
+        const custObj = targetCustomers.find(c => c.name === o.customerName);
+        const custLoc = custObj ? custObj.address : 'রায়পুর বাজার';
+        
+        const productSummary = o.items && o.items.length > 0 
+          ? o.items.map(item => `${item.product.name} - ${item.quantity} ${item.isSticks ? 'শলাকা' : item.product.unit}`).join(', ')
+          : 'বিক্রিত পণ্য';
+
+        const totalCost = o.items ? o.items.reduce((sum, item) => sum + (item.product.buyPrice * item.quantity), 0) : 0;
+        const totalProfit = o.items ? o.items.reduce((sum, item) => {
+          const price = item.isSticks ? (item.product.stickPrice || item.product.sellPrice / (item.product.piecesPerPacket || 1)) : item.product.sellPrice;
+          return sum + ((price - item.product.buyPrice) * item.quantity);
+        }, 0) : 0;
+
+        return {
+          'invoice no': String(o.invoiceNo).trim(),
+          'date': o.date,
+          'customer name': String(o.customerName).trim(),
+          'customer mobile': String(o.customerPhone).trim(),
+          'location': custLoc,
+          'product name': productSummary,
+          'category': (o.items && o.items[0]) ? o.items[0].product.category : 'অন্যান্য',
+          'cost': totalCost,
+          'sales': o.total,
+          'discount': o.discount || 0,
+          'baki': o.due,
+          'payment method': o.paymentType,
+          'profit': totalProfit,
+          'datetime': formatDateTime(new Date())
+        };
+      });
+
+      const payload = {
+        action: 'syncData',
+        tabs: ['bikri', 'stock', 'bakir khata', 'catgeory', 'units'],
+        bikri: formattedBikri,
+        stock: targetProducts.map(p => ({ ...p, datetime: formatDateTime(new Date()) })),
+        'bakir khata': targetCustomers.map(c => ({ ...c, datetime: formatDateTime(new Date()) })),
+        catgeory: targetCategories.map(cat => ({ category_name: cat, datetime: formatDateTime(new Date()) })),
+        units: targetUnits.map(u => ({ unit_name: u, datetime: formatDateTime(new Date()) })),
+        timestamp: new Date().toISOString()
+      };
+
+      const response = await fetch(sheetUrl, {
+        method: 'POST',
+        mode: 'no-cors',
+        headers: { 'Content-Type': 'text/plain' },
+        body: JSON.stringify(payload)
+      });
+      return true;
+
+    } catch (err) {
+      console.error("Sync error:", err);
+      return false;
+    } finally {
+      setIsSyncing(false);
+      setSyncTime(getSyncDisplayTime(new Date()));
+    }
+  };
 
   // Add to Cart helper
   const addToCart = (product: Product) => {
@@ -574,19 +580,18 @@ export default function App() {
     setIsSubmittingSale(true);
     const order = printPreviewOrder;
 
-    // Update product stock
-    setProducts(prev => {
-      return prev.map(p => {
-        const cartItem = order.items.find(ci => ci.product.id === p.id);
-        if (cartItem) {
-          const reduction = cartItem.isSticks ? (cartItem.quantity / (p.piecesPerPacket || 1)) : cartItem.quantity;
-          return { ...p, stock: Math.max(0, p.stock - reduction) };
-        }
-        return p;
-      });
+    // 1. Calculate updated products
+    const updatedProducts = products.map(p => {
+      const cartItem = order.items.find(ci => ci.product.id === p.id);
+      if (cartItem) {
+        const reduction = cartItem.isSticks ? (cartItem.quantity / (p.piecesPerPacket || 1)) : cartItem.quantity;
+        return { ...p, stock: Math.max(0, p.stock - reduction) };
+      }
+      return p;
     });
 
-    // If new customer with due or payment
+    // 2. Calculate updated customers
+    let updatedCustomers = [...customers];
     if (newCustName.trim()) {
       const newCustObj: Customer = {
         id: `c-${Date.now()}`,
@@ -598,29 +603,26 @@ export default function App() {
         createdAt: formatDate(new Date()),
         status: order.due > 0 ? 'pending' : 'clear'
       };
-      setCustomers([newCustObj, ...customers]);
+      updatedCustomers = [newCustObj, ...updatedCustomers];
       setNewCustomersCountToday(prev => prev + 1);
     } else if (order.customerName !== 'নগদ ক্রেতা') {
-      // Update existing customer due amount
-      setCustomers(prev => {
-        const exists = prev.some(c => c.name === order.customerName);
-        if (!exists && order.due > 0) {
-          // Add customer if missing
-          return [
-            {
-              id: `c-${Date.now()}`,
-              name: order.customerName,
-              phone: order.customerPhone,
-              address: 'রায়পুর বাজার',
-              dueAmount: order.due,
-              lastPurchaseDate: formatDate(new Date()),
-              createdAt: formatDate(new Date()),
-              status: 'pending'
-            },
-            ...prev
-          ];
-        }
-        return prev.map(c => {
+      const exists = updatedCustomers.some(c => c.name === order.customerName);
+      if (!exists && order.due > 0) {
+        updatedCustomers = [
+          {
+            id: `c-${Date.now()}`,
+            name: order.customerName,
+            phone: order.customerPhone,
+            address: 'রায়পুর বাজার',
+            dueAmount: order.due,
+            lastPurchaseDate: formatDate(new Date()),
+            createdAt: formatDate(new Date()),
+            status: 'pending'
+          },
+          ...updatedCustomers
+        ];
+      } else {
+        updatedCustomers = updatedCustomers.map(c => {
           if (c.name === order.customerName) {
             const newDue = c.dueAmount + order.due;
             return {
@@ -632,14 +634,17 @@ export default function App() {
           }
           return c;
         });
-      });
+      }
     }
 
-    setOrders(prev => {
-      const updated = [order, ...prev];
-      localStorage.setItem('abdus_store_orders', JSON.stringify(updated));
-      return updated;
-    });
+    // 3. Update orders
+    const updatedOrders = [order, ...orders];
+
+    // Apply states
+    setProducts(updatedProducts);
+    setCustomers(updatedCustomers);
+    setOrders(updatedOrders);
+    
     setSuccessModal(order);
     setPrintPreviewOrder(null);
     setCart([]);
@@ -651,11 +656,9 @@ export default function App() {
 
     logActivity('sale', `নতুন বিক্রি: ${order.customerName}`, `${order.items.length}টি পণ্য, ইনভয়েস: ${order.invoiceNo}`, order.total);
 
-    // Trigger Auto-Sync to Google Sheets immediately in background
-    setTimeout(async () => {
-      await handleSync();
-      setIsSubmittingSale(false);
-    }, 500);
+    // 4. Immediate Sync with full updated dataset
+    await handleSync(updatedOrders, updatedProducts, updatedCustomers);
+    setIsSubmittingSale(false);
   };
 
   // Calculations for Home Metrics
@@ -671,17 +674,14 @@ export default function App() {
 
   const totalOrdersCount = filteredOrders.length;
   const totalSalesAmount = filteredOrders.reduce((sum, o) => sum + o.total, 0);
+  // Total Customers = Unique Names in Ledger
   const totalCustomersCount = customers.length;
   
-  // New customers added to the ledger in the current timeframe
-  const newCustomersCount = customers.filter(c => {
-    if (timeframe === 'today') return c.createdAt === formatDate(new Date());
-    // For week/month we'd need more complex date parsing, 
-    // but for now, today is most important.
-    return c.createdAt === formatDate(new Date()); 
-  }).length;
+  // New customers added today
+  const newCustomersCount = customers.filter(c => c.createdAt === formatDate(new Date())).length;
   
-  const oldCustomersCount = customers.length - newCustomersCount;
+  // Old customers = Total - New
+  const oldCustomersCount = Math.max(0, totalCustomersCount - newCustomersCount);
   
   const totalProfitAmount = filteredOrders.reduce((sum, o) => {
     const orderProfit = o.items.reduce((itemSum, item) => {
@@ -779,11 +779,11 @@ export default function App() {
               </button>
             )}
             <button 
-              onClick={handleSync}
+              onClick={() => fetchData()}
               className="flex items-center gap-1 bg-[#1B7A5E] hover:bg-[#155e48] text-white px-2 py-1 rounded-lg transition text-[9px] shadow-sm font-bold"
             >
               <RefreshCw className={`w-2.5 h-2.5 ${isSyncing ? 'animate-spin' : ''}`} />
-              <span className="whitespace-nowrap">Sync: {syncTime}</span>
+              <span className="whitespace-nowrap">{syncTime}</span>
             </button>
           </div>
         </header>
@@ -811,6 +811,13 @@ export default function App() {
                     {tf.label}
                   </button>
                 ))}
+                <button 
+                  onClick={() => fetchData()}
+                  className="px-3 py-2 text-[#113F33] hover:bg-emerald-100 rounded-lg transition flex items-center justify-center border-l border-emerald-100"
+                  title="রিফ্রেশ"
+                >
+                  <RefreshCw className={`w-3.5 h-3.5 ${isSyncing ? 'animate-spin' : ''}`} />
+                </button>
               </div>
 
               {timeframe === 'more' && (
@@ -1256,7 +1263,7 @@ export default function App() {
                         বাতিল
                       </button>
                        <button 
-                         onClick={() => {
+                         onClick={async () => {
                            if (!newProductName.trim()) {
                              alert('দয়া করে পণ্যের নাম দিন');
                              return;
@@ -1283,7 +1290,10 @@ export default function App() {
                            setProducts(updatedProducts);
                            logActivity('new_product', `নতুন পণ্য: ${newProd.name}`, `ক্যাটাগরি: ${newProd.category}, স্টক: ${newProd.stock}`, newProd.buyPrice * newProd.stock);
                            setIsAddProductOpen(false);
-                           handleSync(orders, updatedProducts, customers, categoriesList, unitsList);
+                           
+                           // Immediate Awaited Sync
+                           await handleSync(orders, updatedProducts, customers, categoriesList, unitsList);
+                           
                            setNewProductName('');
                            setNewProductStock('');
                            setNewProductBuy('');
@@ -1329,7 +1339,7 @@ export default function App() {
                         className="flex-1 px-3 py-2 bg-white border border-gray-200 rounded-xl font-bold text-emerald-700"
                       />
                        <button 
-                         onClick={() => {
+                         onClick={async () => {
                            const amt = Number(restockAmount);
                            if (isNaN(amt) || amt <= 0) return;
                            const updatedProducts = products.map(p => p.id === editingProduct.id ? { ...p, stock: p.stock + amt } : p);
@@ -1337,7 +1347,9 @@ export default function App() {
                            logActivity('stock_in', `স্টক ইন: ${editingProduct.name}`, `${amt} ${editingProduct.unit} যুক্ত করা হয়েছে`, editingProduct.buyPrice * amt);
                            alert(`${amt} ${editingProduct.unit} স্টক যোগ করা হয়েছে।`);
                            setRestockAmount('');
-                           handleSync(orders, updatedProducts, customers, categoriesList, unitsList);
+                           
+                           // Immediate Awaited Sync
+                           await handleSync(orders, updatedProducts, customers, categoriesList, unitsList);
                          }}
                          className="px-4 py-2 bg-[#1B7A5E] text-white rounded-xl font-bold"
                        >
@@ -1406,45 +1418,49 @@ export default function App() {
                       </div>
                 </div>
 
-                <div className="flex gap-2 pt-2">
-                  <button 
-                    onClick={() => {
-                      const updatedProducts = products.map(p => {
-                        if (p.id === editingProduct.id) {
-                          return {
-                            ...p,
-                            name: editProdName,
-                            category: editProdCategory,
-                            unit: editProdUnit,
-                            buyPrice: Number(editProdBuy) || p.buyPrice,
-                            sellPrice: Number(editProdSell) || p.sellPrice,
-                            repName: editProdRep,
-                            repPhone: editProdPhone,
-                            piecesPerPacket: Number((document.getElementById('piece_per_packet_edit') as HTMLInputElement)?.value) || p.piecesPerPacket,
-                            stickPrice: Number((document.getElementById('stick_price_edit') as HTMLInputElement)?.value) || p.stickPrice
-                          };
-                        }
-                        return p;
-                      });
-                      setProducts(updatedProducts);
-                      setEditingProduct(null);
-                      handleSync(orders, updatedProducts, customers, categoriesList, unitsList);
-                    }}
-                    className="flex-1 py-2.5 rounded-xl bg-[#1B7A5E] text-white font-bold text-xs shadow hover:bg-[#113F33]"
-                  >
+                 <div className="flex gap-2 pt-2">
+                   <button 
+                     onClick={async () => {
+                       const updatedProducts = products.map(p => {
+                         if (p.id === editingProduct.id) {
+                           return {
+                             ...p,
+                             name: editProdName,
+                             category: editProdCategory,
+                             unit: editProdUnit,
+                             buyPrice: Number(editProdBuy) || p.buyPrice,
+                             sellPrice: Number(editProdSell) || p.sellPrice,
+                             repName: editProdRep,
+                             repPhone: editProdPhone,
+                             piecesPerPacket: Number((document.getElementById('piece_per_packet_edit') as HTMLInputElement)?.value) || p.piecesPerPacket,
+                             stickPrice: Number((document.getElementById('stick_price_edit') as HTMLInputElement)?.value) || p.stickPrice
+                           };
+                         }
+                         return p;
+                       });
+                       setProducts(updatedProducts);
+                       setEditingProduct(null);
+                       
+                       // Immediate Awaited Sync
+                       await handleSync(orders, updatedProducts, customers, categoriesList, unitsList);
+                     }}
+                     className="flex-1 py-2.5 rounded-xl bg-[#1B7A5E] text-white font-bold text-xs shadow hover:bg-[#113F33]"
+                   >
                     তথ্য সেভ করুন
                   </button>
-                  <button 
-                    onClick={() => {
-                      if (confirm('আপনি কি নিশ্চিতভাবে এই পণ্যটি মুছে ফেলতে চান?')) {
-                        const updatedProducts = products.filter(p => p.id !== editingProduct.id);
-                        setProducts(updatedProducts);
-                        setEditingProduct(null);
-                        handleSync(orders, updatedProducts, customers, categoriesList, unitsList);
-                      }
-                    }}
-                    className="px-3 py-2.5 rounded-xl bg-red-50 text-red-600 font-bold text-xs"
-                  >
+                   <button 
+                     onClick={async () => {
+                       if (confirm('আপনি কি নিশ্চিতভাবে এই পণ্যটি মুছে ফেলতে চান?')) {
+                         const updatedProducts = products.filter(p => p.id !== editingProduct.id);
+                         setProducts(updatedProducts);
+                         setEditingProduct(null);
+                         
+                         // Immediate Awaited Sync
+                         await handleSync(orders, updatedProducts, customers, categoriesList, unitsList);
+                       }
+                     }}
+                     className="px-3 py-2.5 rounded-xl bg-red-50 text-red-600 font-bold text-xs"
+                   >
                     <Trash2 className="w-4 h-4" />
                   </button>
                 </div>
@@ -1524,10 +1540,10 @@ export default function App() {
               </div>
 
                 <div className="bg-white rounded-2xl shadow-sm border border-emerald-100 overflow-hidden flex-1 flex flex-col w-full">
-                  <div className="p-3 bg-emerald-50/50 border-b border-emerald-100 font-bold text-[10px] text-emerald-900 grid grid-cols-6 gap-2 items-center sticky top-0 z-10 text-center">
-                    <div className="text-left col-span-2">ক্রেতার নাম</div>
+                  <div className="p-3 bg-emerald-50/50 border-b border-emerald-100 font-bold text-[10px] text-emerald-900 grid grid-cols-5 gap-1 items-center sticky top-0 z-10 text-center">
+                    <div className="text-left">ক্রেতার নাম</div>
                     <div>মোবাইল</div>
-                    <div className="col-span-2">ঠিকানা</div>
+                    <div>ঠিকানা</div>
                     <div>বাকি</div>
                     <div>অ্যাকশন</div>
                   </div>
@@ -1541,17 +1557,17 @@ export default function App() {
                         c.address.toLowerCase().includes(ledgerSearchQuery.toLowerCase())
                       )
                       .map(customer => (
-                          <div key={customer.id} className="p-3 grid grid-cols-6 gap-2 items-center text-[12px] border-b border-emerald-50 hover:bg-emerald-50/30 transition text-center">
-                            <div className="text-left font-bold text-gray-800 truncate col-span-2">{customer.name}</div>
+                          <div key={customer.id} className="p-3 grid grid-cols-5 gap-1 items-center text-[11px] border-b border-emerald-50 hover:bg-emerald-50/30 transition text-center">
+                            <div className="text-left font-bold text-gray-800 truncate">{customer.name}</div>
                             <div className="text-gray-600 truncate">{customer.phone}</div>
-                            <div className="text-gray-500 truncate col-span-2">{customer.address}</div>
+                            <div className="text-gray-500 truncate">{customer.address}</div>
                             <div className="font-black text-red-600 tabular-nums">
-                              {customer.dueAmount.toLocaleString('en-IN')} ৳
+                              {customer.dueAmount.toLocaleString('en-IN')}
                             </div>
                             <div className="flex justify-center">
                               <button 
                                 onClick={() => { setDepositModalCustomer(customer); setDepositAmountInput(String(customer.dueAmount)); }}
-                                className="px-4 py-2 rounded-xl bg-[#1B7A5E] text-white font-bold text-[11px] shadow-sm active:scale-95 transition hover:bg-[#113F33]"
+                                className="px-3 py-1.5 rounded-lg bg-[#1B7A5E] text-white font-bold text-[10px] shadow-sm active:scale-95 transition hover:bg-[#113F33]"
                               >
                                 জমা
                               </button>
@@ -1581,6 +1597,44 @@ export default function App() {
                   <h2 className="font-bold text-base text-gray-900">{STORE_NAME}</h2>
                   <p className="text-xs text-gray-500">প্রোপ্রাইটর • মোবাইল: {STORE_PHONE}</p>
                   <p className="text-[11px] text-[#1B7A5E] font-medium mt-0.5">{STORE_ADDRESS}</p>
+                </div>
+              </div>
+
+               {/* Connect Sheet Section */}
+              <div className="bg-[#113F33] p-4 rounded-2xl shadow-sm text-white space-y-3">
+                <div className="flex items-center gap-2 mb-1">
+                  <RefreshCw className={`w-5 h-5 text-emerald-400 ${isSyncing ? 'animate-spin' : ''}`} />
+                  <h3 className="font-bold text-sm">ক্লাউড সিঙ্ক স্ট্যাটাস (Cloud Sync)</h3>
+                </div>
+                <div className="bg-white/5 p-3 rounded-xl border border-white/10 space-y-2">
+                  <div className="flex justify-between items-center text-[10px]">
+                    <span className="text-emerald-200">কানেকশন স্ট্যাটাস:</span>
+                    <span className="bg-emerald-500/20 text-emerald-400 px-2 py-0.5 rounded-full font-bold">অ্যাক্টিভ ও ফিক্সড</span>
+                  </div>
+                  <p className="text-[9px] text-emerald-300 leading-tight">আপনার সব ডাটা এই আইডি-র গুগল শিটে অটোমেটিক সেভ হচ্ছে। সব ফোনেই এটি অটো কাজ করবে।</p>
+                </div>
+                
+                <div className="flex gap-2">
+                  <button 
+                    onClick={async () => {
+                      const success = await fetchData();
+                      if (success) alert('ডাটা সফলভাবে ক্লাউড থেকে আপডেট করা হয়েছে!');
+                      else alert('ডাটা লোড করতে সমস্যা হয়েছে। ইন্টারনেট চেক করুন।');
+                    }}
+                    className="flex-1 py-2 bg-emerald-500 hover:bg-emerald-600 text-white rounded-xl text-[11px] font-bold shadow-sm transition"
+                  >
+                    ডাটা আপডেট (Sync Now)
+                  </button>
+                  <button 
+                    onClick={async () => {
+                      const success = await handleSync();
+                      if (success) alert('ডাটা সফলভাবে ব্যাকআপ নেওয়া হয়েছে!');
+                      else alert('ব্যাকআপ নিতে সমস্যা হয়েছে।');
+                    }}
+                    className="flex-1 py-2 bg-white/10 hover:bg-white/20 text-white rounded-xl text-[11px] font-bold border border-white/20 transition"
+                  >
+                    ম্যানুয়াল ব্যাকআপ
+                  </button>
                 </div>
               </div>
 
@@ -1895,23 +1949,30 @@ export default function App() {
                   বাতিল
                 </button>
                 <button 
-                  onClick={() => {
+                  onClick={async () => {
                     const amt = Number(depositAmountInput);
                     if (isNaN(amt) || amt <= 0) {
                       alert('দয়া করে সঠিক জমার পরিমাণ লিখুন');
                       return;
                     }
-                    setCustomers(prev => prev.map(c => {
+                    
+                    const updatedCustomers: Customer[] = customers.map(c => {
                       if (c.id === depositModalCustomer.id) {
                         const newDue = Math.max(0, c.dueAmount - amt);
-                        return { ...c, dueAmount: newDue, status: newDue === 0 ? 'clear' : 'pending' };
+                        const newStatus: 'clear' | 'pending' = newDue === 0 ? 'clear' : 'pending';
+                        return { ...c, dueAmount: newDue, status: newStatus };
                       }
                       return c;
-                    }));
+                    });
+                    
+                    setCustomers(updatedCustomers);
                     logActivity('payment', `টাকা জমা: ${depositModalCustomer.name}`, `${amt} ৳ (${depositMethod === 'cash' ? 'নগদ' : 'বিকাশ'}) জমা দেওয়া হয়েছে।`, amt);
                     alert(`সফলভাবে ${depositModalCustomer.name}-এর কাছ থেকে ${amt} (${depositMethod === 'cash' ? 'নগদ' : 'বিকাশ'}) জমা নেওয়া হয়েছে।`);
                     setDepositModalCustomer(null);
-                    setTimeout(handleSync, 500);
+                    setDepositAmountInput('');
+                    
+                    // Immediate Sync
+                    await handleSync(orders, products, updatedCustomers);
                   }}
                   className="flex-1 py-2.5 rounded-xl bg-[#1B7A5E] text-white font-bold text-xs shadow hover:bg-[#113F33]"
                 >
@@ -2188,15 +2249,13 @@ function doPost(e) {
   } finally {
     lock.releaseLock();
   }
-}
-
 }`}</pre>
               </div>
 
               <div className="flex gap-2 pt-1">
                 <button 
                    onClick={() => {
-                    const scriptCode = `function doPost(e) { return handleRequest(e); }\nfunction doGet(e) { return handleRequest(e); }\n\nfunction handleRequest(e) {\n  var lock = LockService.getScriptLock();\n  try {\n    lock.waitLock(30000);\n    var ss = SpreadsheetApp.getActiveSpreadsheet();\n    var data = {};\n    if (e && e.parameter && e.parameter.data) {\n      try { data = JSON.parse(e.parameter.data); } catch(err) {}\n    }\n    if ((!data || !data.bikri) && e && e.postData && e.postData.contents) {\n      try { data = JSON.parse(e.postData.contents); } catch(err) {}\n    }\n    var syncTime = data.timestamp || new Date().toISOString();\n\n    var bikriSheet = ss.getSheetByName('bikri') || ss.insertSheet('bikri');\n    if(bikriSheet.getLastRow() === 0) bikriSheet.appendRow(['invoice no', 'date', 'customer name', 'customer mobile', 'location', 'product name', 'category', 'cost', 'sales', 'discount', 'baki', 'payment method', 'profit', 'datetime']);\n    if (data && data.bikri && data.bikri.length > 0) {\n      var existingData = bikriSheet.getDataRange().getValues();\n      var existingKeys = {};\n      for(var x=1; x<existingData.length; x++) {\n        var inv = (existingData[x][0] || '').toString().trim();\n        existingKeys[inv] = true;\n      }\n      data.bikri.forEach(function(r) {\n        var invNo = (r['invoice no'] || r['invoice_no'] || '').toString().trim();\n        var rowKey = invNo;\n        if (invNo && !existingKeys[rowKey]) {\n            bikriSheet.appendRow([invNo, r['date']||'', r['customer name']||'', r['customer mobile']||'', r['location']||'', r['product name']||'', r['category']||'', r['cost']||0, r['sales']||0, r['discount']||0, r['baki']||0, r['payment method']||'', r['profit']||0, r['datetime'] || syncTime]);\n            existingKeys[rowKey] = true;\n        }\n      });\n    }\n\n    var stockSheet = ss.getSheetByName('stock') || ss.insertSheet('stock');\n    if (data && data.stock && data.stock.length > 0) {\n        stockSheet.clear();\n        stockSheet.getRange(1, 1, 1, 11).setValues([['id', 'name', 'category', 'stock', 'unit', 'buyPrice', 'sellPrice', 'barcode', 'repName', 'repPhone', 'datetime']]);\n        var stockRows = data.stock.map(function(p) { return [p.id||'', p.name||'', p.category||'', p.stock||0, p.unit||'', p.buyPrice||0, p.sellPrice||0, p.barcode||'', p.repName||'', p.repPhone||'', p.datetime || syncTime]; });\n        stockSheet.getRange(2, 1, stockRows.length, 11).setValues(stockRows);\n    }\n\n    var bakiSheet = ss.getSheetByName('bakir khata') || ss.insertSheet('bakir khata');\n    if (data && data['bakir khata'] && data['bakir khata'].length > 0) {\n        bakiSheet.clear();\n        bakiSheet.getRange(1, 1, 1, 8).setValues([['id', 'name', 'phone', 'address', 'dueAmount', 'lastPurchaseDate', 'status', 'datetime']]);\n        var bakiRows = data['bakir khata'].map(function(c) { return [c.id||'', c.name||'', c.phone||'', c.address||'', c.dueAmount||0, c.lastPurchaseDate||'', c.status||'', c.datetime || syncTime]; });\n        bakiSheet.getRange(2, 1, bakiRows.length, 8).setValues(bakiRows);\n    }\n\n    var catSheet = ss.getSheetByName('catgeory') || ss.insertSheet('catgeory');\n    if (data && data.catgeory && data.catgeory.length > 0) {\n      catSheet.clear();\n      catSheet.getRange(1, 1, 1, 2).setValues([['category_name', 'datetime']]);\n      var catRows = data.catgeory.map(function(cat) { return [cat.category_name || cat, cat.datetime || syncTime]; });\n      catSheet.getRange(2, 1, catRows.length, 2).setValues(catRows);\n    }\n\n    var unitsSheet = ss.getSheetByName('units') || ss.insertSheet('units');\n    if (data && data.units && data.units.length > 0) {\n      unitsSheet.clear();\n      unitsSheet.getRange(1, 1, 1, 2).setValues([['unit_name', 'datetime']]);\n      var unitRows = data.units.map(function(u) { return [u.unit_name || u, u.datetime || syncTime]; });\n      unitsSheet.getRange(2, 1, unitRows.length, 2).setValues(unitRows);\n    }\n\n    return ContentService.createTextOutput(JSON.stringify({ success: true, message: 'Synced successfully' })).setMimeType(ContentService.MimeType.JSON);\n  } catch (err) {\n    return ContentService.createTextOutput(JSON.stringify({ success: false, error: err.toString() })).setMimeType(ContentService.MimeType.JSON);\n  } finally {\n    lock.releaseLock();\n  }\n}`;
+                    const scriptCode = `function doPost(e) { return handleRequest(e); }\nfunction doGet(e) {\n  var action = e.parameter.action;\n  if (action === 'getData') {\n    var ss = SpreadsheetApp.getActiveSpreadsheet();\n    var result = { success: true };\n    var tabs = ['bikri', 'stock', 'bakir khata', 'catgeory', 'units'];\n    tabs.forEach(function(tabName) {\n      var sheet = ss.getSheetByName(tabName);\n      if (sheet) {\n        var data = sheet.getDataRange().getValues();\n        var headers = data[0];\n        var rows = [];\n        for (var i = 1; i < data.length; i++) {\n          var obj = {};\n          for (var j = 0; j < headers.length; j++) { obj[headers[j]] = data[i][j]; }\n          rows.push(obj);\n        }\n        var cleanName = tabName.replace(' ', '_');\n        result[cleanName] = rows;\n      }\n    });\n    return ContentService.createTextOutput(JSON.stringify(result)).setMimeType(ContentService.MimeType.JSON);\n  }\n  return ContentService.createTextOutput(JSON.stringify({ success: false, error: 'Invalid action' })).setMimeType(ContentService.MimeType.JSON);\n}\n\nfunction handleRequest(e) {\n  var lock = LockService.getScriptLock();\n  try {\n    lock.waitLock(30000);\n    var ss = SpreadsheetApp.getActiveSpreadsheet();\n    var data = JSON.parse(e.postData.contents);\n    var syncTime = data.timestamp || new Date().toISOString();\n\n    var bikriSheet = ss.getSheetByName('bikri') || ss.insertSheet('bikri');\n    if(bikriSheet.getLastRow() === 0) bikriSheet.appendRow(['invoice no', 'date', 'customer name', 'customer mobile', 'location', 'product name', 'category', 'cost', 'sales', 'discount', 'baki', 'payment method', 'profit', 'datetime']);\n    if (data.bikri && data.bikri.length > 0) {\n      var existingData = bikriSheet.getDataRange().getValues();\n      var existingKeys = {};\n      for(var x=1; x<existingData.length; x++) { existingKeys[String(existingData[x][0]).trim()] = true; }\n      data.bikri.forEach(function(r) {\n        var invNo = String(r['invoice no']).trim();\n        if (invNo && !existingKeys[invNo]) {\n            bikriSheet.appendRow([invNo, r['date'], r['customer name'], r['customer mobile'], r['location'], r['product name'], r['category'], r['cost'], r['sales'], r['discount'], r['baki'], r['payment method'], r['profit'], r['datetime']]);\n            existingKeys[invNo] = true;\n        }\n      });\n    }\n\n    var stockSheet = ss.getSheetByName('stock') || ss.insertSheet('stock');\n    stockSheet.clear();\n    stockSheet.appendRow(['id', 'name', 'category', 'stock', 'unit', 'buyPrice', 'sellPrice', 'barcode', 'repName', 'repPhone', 'datetime']);\n    if (data.stock && data.stock.length > 0) {\n        var stockRows = data.stock.map(function(p) { return [p.id, p.name, p.category, p.stock, p.unit, p.buyPrice, p.sellPrice, p.barcode, p.repName, p.repPhone, p.datetime]; });\n        stockSheet.getRange(2, 1, stockRows.length, 11).setValues(stockRows);\n    }\n\n    var bakiSheet = ss.getSheetByName('bakir khata') || ss.insertSheet('bakir khata');\n    bakiSheet.clear();\n    bakiSheet.appendRow(['id', 'name', 'phone', 'address', 'dueAmount', 'lastPurchaseDate', 'createdAt', 'status', 'datetime']);\n    if (data['bakir khata'] && data['bakir khata'].length > 0) {\n        var bakiRows = data['bakir khata'].map(function(c) { return [c.id, c.name, c.phone, c.address, c.dueAmount, c.lastPurchaseDate, c.createdAt, c.status, c.datetime]; });\n        bakiSheet.getRange(2, 1, bakiRows.length, 9).setValues(bakiRows);\n    }\n\n    var catSheet = ss.getSheetByName('catgeory') || ss.insertSheet('catgeory');\n    catSheet.clear(); catSheet.appendRow(['category_name', 'datetime']);\n    if (data.catgeory && data.catgeory.length > 0) {\n      var catRows = data.catgeory.map(function(cat) { return [cat.category_name, cat.datetime]; });\n      catSheet.getRange(2, 1, catRows.length, 2).setValues(catRows);\n    }\n\n    var unitsSheet = ss.getSheetByName('units') || ss.insertSheet('units');\n    unitsSheet.clear(); unitsSheet.appendRow(['unit_name', 'datetime']);\n    if (data.units && data.units.length > 0) {\n      var unitRows = data.units.map(function(u) { return [u.unit_name, u.datetime]; });\n      unitsSheet.getRange(2, 1, unitRows.length, 2).setValues(unitRows);\n    }\n\n    return ContentService.createTextOutput(JSON.stringify({ success: true })).setMimeType(ContentService.MimeType.JSON);\n  } catch (err) {\n    return ContentService.createTextOutput(JSON.stringify({ success: false, error: err.toString() })).setMimeType(ContentService.MimeType.JSON);\n  } finally {\n    lock.releaseLock();\n  }\n}`;
                     navigator.clipboard.writeText(scriptCode);
                     alert('কোড কপি করা হয়েছে!');
                   }}

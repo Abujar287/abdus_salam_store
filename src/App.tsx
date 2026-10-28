@@ -45,12 +45,22 @@ import {
   UserPlus,
   Receipt
 } from 'lucide-react';
+import { 
+  isSameDay, 
+  isWithinInterval, 
+  startOfWeek, 
+  endOfWeek, 
+  isSameMonth, 
+  isSameYear, 
+  parseISO, 
+  format 
+} from 'date-fns';
 
 // Store Info Constants
 const STORE_NAME = 'আব্দুস সালাম স্টোর';
 const STORE_PHONE = '01969249225';
 const STORE_ADDRESS = 'রায়পুর বাজার, বাঘারপাড়া, যশোর';
-const SHEET_URL = 'https://script.google.com/macros/s/AKfycbx6qXyoYua4tUchRlaa0mH78EXxgbvmRWmVpWfxv5v4_At4_QGvwS13H8ruZf1J3bGBeA/exec';
+const DEFAULT_SHEET_URL = 'https://script.google.com/macros/s/AKfycbx6qXyoYua4tUchRlaa0mH78EXxgbvmRWmVpWfxv5v4_At4_QGvwS13H8ruZf1J3bGBeA/exec';
 
 /// Types
 interface Product {
@@ -100,6 +110,7 @@ interface Order {
   date: string; // e.g. '28-Oct-26'
   rawDate: string; // YYYY-MM-DD
   status: 'completed' | 'pending';
+  profit: number;
 }
 
 interface Customer {
@@ -126,15 +137,55 @@ interface DateHistoryRecord {
 
 export default function App() {
   const formatDate = (date: Date) => {
-    const day = date.getDate();
-    const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-    const month = monthNames[date.getMonth()];
-    const year = date.getFullYear().toString().slice(-2);
-    return `${day}-${month}-${year}`;
+    try {
+      const day = date.getDate();
+      const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+      const month = monthNames[date.getMonth()];
+      const year = date.getFullYear().toString().slice(-2);
+      return `${day}-${month}-${year}`;
+    } catch (e) {
+      return '??-???-??';
+    }
+  };
+
+  const normalizeDate = (dateVal: any): string => {
+    if (!dateVal) return '';
+    try {
+      let d: Date;
+      if (dateVal instanceof Date) {
+        d = dateVal;
+      } else if (typeof dateVal === 'string') {
+        // Handle '28-Oct-26' format
+        const parts = dateVal.split('-');
+        if (parts.length === 3) {
+          const day = parseInt(parts[0]);
+          const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+          const month = monthNames.indexOf(parts[1]);
+          const year = 2000 + parseInt(parts[2]);
+          if (month !== -1) {
+            d = new Date(year, month, day);
+          } else {
+            d = new Date(dateVal);
+          }
+        } else {
+          d = new Date(dateVal);
+        }
+      } else {
+        d = new Date(dateVal);
+      }
+
+      if (isNaN(d.getTime())) return String(dateVal);
+      
+      const y = d.getFullYear();
+      const m = String(d.getMonth() + 1).padStart(2, '0');
+      const day = String(d.getDate()).padStart(2, '0');
+      return `${y}-${m}-${day}`;
+    } catch (e) {
+      return String(dateVal);
+    }
   };
 
   const formatDateTime = (date: Date) => {
-    // Universal format for Sheets: YYYY-MM-DD HH:mm:ss
     const y = date.getFullYear();
     const m = String(date.getMonth() + 1).padStart(2, '0');
     const d = String(date.getDate()).padStart(2, '0');
@@ -309,7 +360,10 @@ export default function App() {
     }
   }, []);
 
-  const [sheetUrl] = useState<string>(SHEET_URL);
+  const [sheetUrl, setSheetUrl] = useState<string>(() => {
+    const saved = localStorage.getItem('google_sheet_url');
+    return saved || DEFAULT_SHEET_URL;
+  });
 
   // Save to LocalStorage whenever state changes
   useEffect(() => {
@@ -367,13 +421,18 @@ export default function App() {
         if (result.bakir_khata && result.bakir_khata.length > 0) {
           const fetchedCustomers = result.bakir_khata.map((c: any) => ({
             ...c,
-            dueAmount: Number(c.dueAmount) || 0
-          }));
+            dueAmount: Number(c.dueAmount) || 0,
+            createdAt: c.createdAt || '01-Jan-26', // Fallback for old customers
+            lastPurchaseDate: c.lastPurchaseDate || '01-Jan-26'
+          })) as Customer[];
           setCustomers(fetchedCustomers);
         }
 
-        if (result.catgeory && result.catgeory.length > 0) {
-          setCategoriesList(result.catgeory.map((cat: any) => cat.category_name || cat));
+        if (result.category && result.category.length > 0) {
+          const cats = result.category
+            .map((cat: any) => (cat.category_name || cat))
+            .filter((cat: any) => typeof cat === 'string' && cat.trim() !== '');
+          if (cats.length > 0) setCategoriesList(cats);
         }
         
         if (result.units && result.units.length > 0) {
@@ -381,23 +440,43 @@ export default function App() {
         }
 
         if (result.bikri && result.bikri.length > 0) {
-          const fetchedOrders = result.bikri.map((o: any) => ({
-            id: `ord-sync-${o['invoice no']}`,
-            invoiceNo: o['invoice no'],
-            customerName: o['customer name'],
-            customerPhone: o['customer mobile'],
-            items: [], 
-            total: Number(o.sales) || 0,
-            due: Number(o.baki) || 0,
-            paid: (Number(o.sales) || 0) - (Number(o.baki) || 0),
-            paymentType: o['payment method'],
-            date: o.date,
-            rawDate: o.datetime ? o.datetime.split(' ')[0] : o.date,
-            status: Number(o.baki) > 0 ? 'pending' : 'completed'
-          }));
+          const fetchedOrdersMap: { [key: string]: Order } = {};
+          result.bikri.forEach((o: any) => {
+            const invNo = String(o['invoice no'] || '').trim();
+            if (!invNo) return;
+
+            let displayDate = String(o.date || '');
+            let rawDate = displayDate;
+            
+            const parsedDate = new Date(displayDate);
+            if (!isNaN(parsedDate.getTime())) {
+              displayDate = formatDate(parsedDate);
+              rawDate = normalizeDate(parsedDate);
+            }
+
+            if (!fetchedOrdersMap[invNo]) {
+              fetchedOrdersMap[invNo] = {
+                id: `ord-sync-${invNo}`,
+                invoiceNo: invNo,
+                customerName: String(o['customer name'] || 'নগদ ক্রেতা').trim(),
+                customerPhone: String(o['customer mobile'] || '-').trim(),
+                items: [], 
+                subtotal: Number(o.sales) || 0,
+                discount: Number(o.discount) || 0,
+                total: Number(o.sales) || 0,
+                due: Number(o.baki) || 0,
+                paid: (Number(o.sales) || 0) - (Number(o.baki) || 0),
+                paymentType: o['payment method'] || 'cash',
+                date: displayDate,
+                rawDate: rawDate,
+                status: Number(o.baki) > 0 ? 'pending' : 'completed',
+                profit: Number(o.profit) || 0
+              };
+            }
+          });
           
-          // Overwrite with sheet data for perfect sync
-          setOrders(fetchedOrders.sort((a, b) => b.invoiceNo.localeCompare(a.invoiceNo)));
+          const sortedOrders = Object.values(fetchedOrdersMap).sort((a, b) => b.invoiceNo.localeCompare(a.invoiceNo));
+          setOrders(sortedOrders);
         }
         return true;
       } else {
@@ -430,7 +509,7 @@ export default function App() {
         const custLoc = custObj ? custObj.address : 'রায়পুর বাজার';
         
         const productSummary = o.items && o.items.length > 0 
-          ? o.items.map(item => `${item.product.name} - ${item.quantity} ${item.isSticks ? 'শলাকা' : item.product.unit}`).join(', ')
+          ? o.items.map(item => `${item.product.name} - ${item.quantity} ${item.isSticks ? 'শলাকা' : item.product.unit}`).join('\n')
           : 'বিক্রিত পণ্য';
 
         const totalCost = o.items ? o.items.reduce((sum, item) => sum + (item.product.buyPrice * item.quantity), 0) : 0;
@@ -459,18 +538,18 @@ export default function App() {
 
       const payload = {
         action: 'syncData',
-        tabs: ['bikri', 'stock', 'bakir khata', 'catgeory', 'units'],
+        tabs: ['bikri', 'stock', 'bakir khata', 'category', 'units'],
         bikri: formattedBikri,
         stock: targetProducts.map(p => ({ ...p, datetime: formatDateTime(new Date()) })),
         'bakir khata': targetCustomers.map(c => ({ ...c, datetime: formatDateTime(new Date()) })),
-        catgeory: targetCategories.map(cat => ({ category_name: cat, datetime: formatDateTime(new Date()) })),
+        category: targetCategories.map(cat => ({ category_name: cat, datetime: formatDateTime(new Date()) })),
         units: targetUnits.map(u => ({ unit_name: u, datetime: formatDateTime(new Date()) })),
         timestamp: new Date().toISOString()
       };
 
       const response = await fetch(sheetUrl, {
         method: 'POST',
-        mode: 'no-cors',
+        // mode: 'no-cors', // REMOVED no-cors to allow seeing if request was sent or failed
         headers: { 'Content-Type': 'text/plain' },
         body: JSON.stringify(payload)
       });
@@ -568,7 +647,8 @@ export default function App() {
       paymentType: dueAmt > 0 ? 'credit' : 'cash',
       date: formatDate(new Date()),
       rawDate: new Date().toISOString().split('T')[0],
-      status: dueAmt > 0 ? 'pending' : 'completed'
+      status: dueAmt > 0 ? 'pending' : 'completed',
+      profit: tot - (cart.reduce((sum, item) => sum + (item.product.buyPrice * item.quantity), 0))
     };
 
     setPrintPreviewOrder(draftOrder);
@@ -667,28 +747,70 @@ export default function App() {
 
   // Metrics based on timeframe
   const filteredOrders = orders.filter(o => {
-    if (timeframe === 'today') return o.rawDate === new Date().toISOString().split('T')[0];
-    if (timeframe === 'week') return true;
-    return true; // month
+    const normOrderDate = normalizeDate(o.date || o.rawDate);
+    const normToday = normalizeDate(new Date());
+    
+    if (timeframe === 'today') {
+      return normOrderDate === normToday;
+    }
+    
+    const oDate = new Date(normOrderDate);
+    if (isNaN(oDate.getTime())) return false;
+
+    if (timeframe === 'week') {
+      return isWithinInterval(oDate, { 
+        start: startOfWeek(new Date(), { weekStartsOn: 6 }), // Saturday start for BD
+        end: endOfWeek(new Date(), { weekStartsOn: 6 }) 
+      });
+    }
+    if (timeframe === 'month') {
+      return isSameMonth(oDate, new Date()) && isSameYear(oDate, new Date());
+    }
+    return true;
   });
 
   const totalOrdersCount = filteredOrders.length;
   const totalSalesAmount = filteredOrders.reduce((sum, o) => sum + o.total, 0);
-  // Total Customers = Unique Names in Ledger
-  const totalCustomersCount = customers.length;
   
-  // New customers added today
-  const newCustomersCount = customers.filter(c => c.createdAt === formatDate(new Date())).length;
+  // Logic Fix: Only count customers who actually bought something in the filtered period
+  const customersInPeriod = Array.from(new Set(filteredOrders.map(o => o.customerName))).filter(name => name !== 'নগদ ক্রেতা');
   
-  // Old customers = Total - New
-  const oldCustomersCount = Math.max(0, totalCustomersCount - newCustomersCount);
+  const newCustomersCount = customersInPeriod.filter(name => {
+    const cust = customers.find(c => c.name === name);
+    if (!cust) return false;
+    const normCreated = normalizeDate(cust.createdAt);
+    
+    if (timeframe === 'today') {
+      return normCreated === normalizeDate(new Date());
+    }
+    const cDate = new Date(normCreated);
+    if (isNaN(cDate.getTime())) return false;
+
+    if (timeframe === 'week') {
+      return isWithinInterval(cDate, { 
+        start: startOfWeek(new Date(), { weekStartsOn: 6 }),
+        end: endOfWeek(new Date(), { weekStartsOn: 6 }) 
+      });
+    }
+    if (timeframe === 'month') {
+      return isSameMonth(cDate, new Date()) && isSameYear(cDate, new Date());
+    }
+    return true;
+  }).length;
+
+  const oldCustomersCount = Math.max(0, customersInPeriod.length - newCustomersCount);
   
   const totalProfitAmount = filteredOrders.reduce((sum, o) => {
-    const orderProfit = o.items.reduce((itemSum, item) => {
-      const price = item.isSticks ? (item.product.stickPrice || item.product.sellPrice / (item.product.piecesPerPacket || 1)) : item.product.sellPrice;
-      const profitPerUnit = price - item.product.buyPrice;
-      return itemSum + (profitPerUnit * item.quantity);
-    }, 0);
+    let orderProfit = 0;
+    if (o.items && o.items.length > 0) {
+      orderProfit = o.items.reduce((itemSum, item) => {
+        const price = item.isSticks ? (item.product.stickPrice || item.product.sellPrice / (item.product.piecesPerPacket || 1)) : item.product.sellPrice;
+        const profitPerUnit = price - item.product.buyPrice;
+        return itemSum + (profitPerUnit * item.quantity);
+      }, 0);
+    } else {
+      orderProfit = o.profit || 0;
+    }
     return sum + orderProfit;
   }, 0);
 
@@ -697,7 +819,9 @@ export default function App() {
   // Date-wise history aggregation
   const dateHistoryMap: { [key: string]: DateHistoryRecord } = {};
   orders.forEach(o => {
-    const dKey = o.date;
+    const dKey = normalizeDate(o.date || o.rawDate);
+    if (!dKey) return;
+    
     if (!dateHistoryMap[dKey]) {
       dateHistoryMap[dKey] = {
         date: dKey,
@@ -710,23 +834,28 @@ export default function App() {
         totalRepPayment: 0
       };
     }
-    dateHistoryMap[dKey].totalOrders += 1;
-    dateHistoryMap[dKey].totalSales += o.total;
-    dateHistoryMap[dKey].totalTotalCustomers += 1;
     
-    const isNew = customers.some(c => c.name === o.customerName && c.createdAt === o.date);
-    if (isNew) {
-      dateHistoryMap[dKey].totalNewCustomers += 1;
-    } else {
-      dateHistoryMap[dKey].totalOldCustomers += 1;
+    const record = dateHistoryMap[dKey];
+    record.totalOrders += 1;
+    record.totalSales += o.total;
+    
+    const isNew = customers.some(c => c.name === o.customerName && normalizeDate(c.createdAt) === dKey);
+    if (o.customerName !== 'নগদ ক্রেতা') {
+      if (isNew) {
+        record.totalNewCustomers += 1;
+      } else {
+        record.totalOldCustomers += 1;
+      }
+      record.totalTotalCustomers = record.totalNewCustomers + record.totalOldCustomers;
     }
     
-    const ordProfit = o.items.reduce((s, i) => {
-      const price = i.isSticks ? (i.product.stickPrice || i.product.sellPrice / (i.product.piecesPerPacket || 1)) : i.product.sellPrice;
-      return s + ((price - i.product.buyPrice) * i.quantity);
-    }, 0);
-    dateHistoryMap[dKey].totalProfit += ordProfit;
-    dateHistoryMap[dKey].totalRepPayment = 0; 
+    const ordProfit = (o.items && o.items.length > 0) 
+      ? o.items.reduce((s, i) => {
+          const price = i.isSticks ? (i.product.stickPrice || i.product.sellPrice / (i.product.piecesPerPacket || 1)) : i.product.sellPrice;
+          return s + ((price - i.product.buyPrice) * i.quantity);
+        }, 0)
+      : (o.profit || 0);
+    record.totalProfit += ordProfit;
   });
 
   const dateHistoryList = Object.values(dateHistoryMap).sort((a, b) => {
@@ -929,8 +1058,8 @@ export default function App() {
                   )}
                 </div>
 
-                <div className="flex space-x-1.5 overflow-x-auto p-2 scrollbar-none bg-white">
-                  {['সব', ...categoriesList].map(cat => (
+                <div className="flex space-x-1.5 overflow-x-auto p-2 scrollbar-none bg-white min-h-[48px]">
+                  {['সব', ...(categoriesList.length > 0 ? categoriesList : ['মুদি', 'সিগারেট', 'কসমেটিকস', 'অন্যান্য'])].map(cat => (
                     <button
                       key={cat}
                       onClick={() => setSelectedCategoryFilter(cat)}
@@ -1611,6 +1740,16 @@ export default function App() {
                     <span className="text-emerald-200">কানেকশন স্ট্যাটাস:</span>
                     <span className="bg-emerald-500/20 text-emerald-400 px-2 py-0.5 rounded-full font-bold">অ্যাক্টিভ ও ফিক্সড</span>
                   </div>
+                  <div className="space-y-1">
+                    <label className="text-[9px] text-emerald-300">গুগল শিট URL (Web App URL):</label>
+                    <input 
+                      type="text" 
+                      value={sheetUrl}
+                      onChange={(e) => setSheetUrl(e.target.value)}
+                      placeholder="https://script.google.com/macros/s/.../exec"
+                      className="w-full px-2 py-1 bg-white/10 border border-white/20 rounded-lg text-[9px] text-white focus:outline-none focus:border-emerald-400"
+                    />
+                  </div>
                   <p className="text-[9px] text-emerald-300 leading-tight">আপনার সব ডাটা এই আইডি-র গুগল শিটে অটোমেটিক সেভ হচ্ছে। সব ফোনেই এটি অটো কাজ করবে।</p>
                 </div>
                 
@@ -2149,14 +2288,13 @@ export default function App() {
               </p>
 
               <div className="bg-gray-900 text-emerald-400 p-3 rounded-xl text-[10px] font-mono overflow-y-auto flex-1 select-all space-y-1">
-                <pre>{`function doGet(e) {
-  var ss = SpreadsheetApp.getActiveSpreadsheet();
+                <pre>{`function doPost(e) { return handleRequest(e); }
+function doGet(e) {
   var action = e.parameter.action;
-  
   if (action === 'getData') {
+    var ss = SpreadsheetApp.getActiveSpreadsheet();
     var result = { success: true };
-    var tabs = ['bikri', 'stock', 'bakir khata', 'catgeory', 'units'];
-    
+    var tabs = ['bikri', 'stock', 'bakir khata', 'category', 'units'];
     tabs.forEach(function(tabName) {
       var sheet = ss.getSheetByName(tabName);
       if (sheet) {
@@ -2165,83 +2303,71 @@ export default function App() {
         var rows = [];
         for (var i = 1; i < data.length; i++) {
           var obj = {};
-          for (var j = 0; j < headers.length; j++) {
-            obj[headers[j]] = data[i][j];
+          var hasData = false;
+          for (var j = 0; j < headers.length; j++) { 
+            obj[headers[j]] = data[i][j]; 
+            if (data[i][j] !== "") hasData = true;
           }
-          rows.push(obj);
+          if (hasData) rows.push(obj);
         }
         var cleanName = tabName.replace(' ', '_');
         result[cleanName] = rows;
       }
     });
-    
     return ContentService.createTextOutput(JSON.stringify(result)).setMimeType(ContentService.MimeType.JSON);
   }
+  return ContentService.createTextOutput(JSON.stringify({ success: false, error: 'Invalid action' })).setMimeType(ContentService.MimeType.JSON);
 }
 
-function doPost(e) {
+function handleRequest(e) {
   var lock = LockService.getScriptLock();
   try {
-    lock.waitLock(30000); 
+    lock.waitLock(30000);
     var ss = SpreadsheetApp.getActiveSpreadsheet();
     var data = JSON.parse(e.postData.contents);
-    var syncTime = data.timestamp || new Date().toISOString();
-
-    // 1. bikri (Append only)
+    
     var bikriSheet = ss.getSheetByName('bikri') || ss.insertSheet('bikri');
-    if (bikriSheet.getLastRow() === 0) {
-      bikriSheet.appendRow(['invoice no', 'date', 'customer name', 'customer mobile', 'location', 'product name', 'category', 'cost', 'sales', 'discount', 'baki', 'payment method', 'profit', 'datetime']);
-    }
+    if(bikriSheet.getLastRow() === 0) bikriSheet.appendRow(['invoice no', 'date', 'customer name', 'customer mobile', 'location', 'product name', 'category', 'cost', 'sales', 'discount', 'baki', 'payment method', 'profit', 'datetime']);
+    
     if (data.bikri && data.bikri.length > 0) {
       var existingData = bikriSheet.getDataRange().getValues();
-      var existingInvoices = {};
-      for (var x = 1; x < existingData.length; x++) {
-        existingInvoices[String(existingData[x][0]).trim()] = true;
-      }
+      var existingKeys = {};
+      for(var x=1; x<existingData.length; x++) { existingKeys[String(existingData[x][0]).trim()] = true; }
+      
       data.bikri.forEach(function(r) {
         var invNo = String(r['invoice no']).trim();
-        if (invNo && !existingInvoices[invNo]) {
-          bikriSheet.appendRow([invNo, r['date'], r['customer name'], r['customer mobile'], r['location'], r['product name'], r['category'], r['cost'], r['sales'], r['discount'], r['baki'], r['payment method'], r['profit'], r['datetime']]);
-          existingInvoices[invNo] = true;
+        if (invNo && !existingKeys[invNo]) {
+            // Force date to be a string to avoid Google Sheets auto-formatting issues
+            bikriSheet.appendRow([invNo, "'" + r['date'], r['customer name'], r['customer mobile'], r['location'], r['product name'], r['category'], r['cost'], r['sales'], r['discount'], r['baki'], r['payment method'], r['profit'], r['datetime']]);
+            existingKeys[invNo] = true;
         }
       });
     }
 
-    // 2. stock (Overwrite)
-    var stockSheet = ss.getSheetByName('stock') || ss.insertSheet('stock');
-    if (data.stock && data.stock.length > 0) {
-      stockSheet.clear();
-      stockSheet.appendRow(['id', 'name', 'category', 'stock', 'unit', 'buyPrice', 'sellPrice', 'barcode', 'repName', 'repPhone', 'datetime']);
-      var stockRows = data.stock.map(function(p) {
-        return [p.id, p.name, p.category, p.stock, p.unit, p.buyPrice, p.sellPrice, p.barcode, p.repName, p.repPhone, p.datetime];
-      });
-      stockSheet.getRange(2, 1, stockRows.length, 11).setValues(stockRows);
-    }
+    // Overwrite sheets that represent current state
+    var sheetsToSync = [
+      { name: 'stock', data: data.stock, headers: ['id', 'name', 'category', 'stock', 'unit', 'buyPrice', 'sellPrice', 'barcode', 'repName', 'repPhone', 'datetime'] },
+      { name: 'bakir khata', data: data['bakir khata'], headers: ['id', 'name', 'phone', 'address', 'dueAmount', 'lastPurchaseDate', 'createdAt', 'status', 'datetime'] },
+      { name: 'category', data: data.category, headers: ['category_name', 'datetime'] },
+      { name: 'units', data: data.units, headers: ['unit_name', 'datetime'] }
+    ];
 
-    // 3. bakir khata (Overwrite)
-    var bakiSheet = ss.getSheetByName('bakir khata') || ss.insertSheet('bakir khata');
-    if (data['bakir khata'] && data['bakir khata'].length > 0) {
-      bakiSheet.clear();
-      bakiSheet.appendRow(['id', 'name', 'phone', 'address', 'dueAmount', 'lastPurchaseDate', 'createdAt', 'status', 'datetime']);
-      var bakiRows = data['bakir khata'].map(function(c) {
-        return [c.id, c.name, c.phone, c.address, c.dueAmount, c.lastPurchaseDate, c.createdAt, c.status, c.datetime];
-      });
-      bakiSheet.getRange(2, 1, bakiRows.length, 9).setValues(bakiRows);
-    }
-
-    // 4. catgeory & units (Overwrite)
-    var catSheet = ss.getSheetByName('catgeory') || ss.insertSheet('catgeory');
-    if (data.catgeory) {
-      catSheet.clear(); catSheet.appendRow(['category_name', 'datetime']);
-      var catRows = data.catgeory.map(function(cat) { return [cat.category_name, cat.datetime]; });
-      if(catRows.length > 0) catSheet.getRange(2, 1, catRows.length, 2).setValues(catRows);
-    }
-    var unitsSheet = ss.getSheetByName('units') || ss.insertSheet('units');
-    if (data.units) {
-      unitsSheet.clear(); unitsSheet.appendRow(['unit_name', 'datetime']);
-      var unitRows = data.units.map(function(u) { return [u.unit_name, u.datetime]; });
-      if(unitRows.length > 0) unitsSheet.getRange(2, 1, unitRows.length, 2).setValues(unitRows);
-    }
+    sheetsToSync.forEach(function(sInfo) {
+      var sheet = ss.getSheetByName(sInfo.name) || ss.insertSheet(sInfo.name);
+      sheet.clear();
+      sheet.appendRow(sInfo.headers);
+      if (sInfo.data && sInfo.data.length > 0) {
+        var rows = sInfo.data.map(function(item) {
+          return sInfo.headers.map(function(h) { 
+            var val = item[h];
+            // If it's a date-like header, prefix with ' to keep as string
+            if (h.toLowerCase().includes('date')) return "'" + val;
+            return val;
+          });
+        });
+        sheet.getRange(2, 1, rows.length, sInfo.headers.length).setValues(rows);
+      }
+    });
 
     return ContentService.createTextOutput(JSON.stringify({ success: true })).setMimeType(ContentService.MimeType.JSON);
   } catch (err) {
@@ -2249,13 +2375,14 @@ function doPost(e) {
   } finally {
     lock.releaseLock();
   }
+}
 }`}</pre>
               </div>
 
               <div className="flex gap-2 pt-1">
                 <button 
                    onClick={() => {
-                    const scriptCode = `function doPost(e) { return handleRequest(e); }\nfunction doGet(e) {\n  var action = e.parameter.action;\n  if (action === 'getData') {\n    var ss = SpreadsheetApp.getActiveSpreadsheet();\n    var result = { success: true };\n    var tabs = ['bikri', 'stock', 'bakir khata', 'catgeory', 'units'];\n    tabs.forEach(function(tabName) {\n      var sheet = ss.getSheetByName(tabName);\n      if (sheet) {\n        var data = sheet.getDataRange().getValues();\n        var headers = data[0];\n        var rows = [];\n        for (var i = 1; i < data.length; i++) {\n          var obj = {};\n          for (var j = 0; j < headers.length; j++) { obj[headers[j]] = data[i][j]; }\n          rows.push(obj);\n        }\n        var cleanName = tabName.replace(' ', '_');\n        result[cleanName] = rows;\n      }\n    });\n    return ContentService.createTextOutput(JSON.stringify(result)).setMimeType(ContentService.MimeType.JSON);\n  }\n  return ContentService.createTextOutput(JSON.stringify({ success: false, error: 'Invalid action' })).setMimeType(ContentService.MimeType.JSON);\n}\n\nfunction handleRequest(e) {\n  var lock = LockService.getScriptLock();\n  try {\n    lock.waitLock(30000);\n    var ss = SpreadsheetApp.getActiveSpreadsheet();\n    var data = JSON.parse(e.postData.contents);\n    var syncTime = data.timestamp || new Date().toISOString();\n\n    var bikriSheet = ss.getSheetByName('bikri') || ss.insertSheet('bikri');\n    if(bikriSheet.getLastRow() === 0) bikriSheet.appendRow(['invoice no', 'date', 'customer name', 'customer mobile', 'location', 'product name', 'category', 'cost', 'sales', 'discount', 'baki', 'payment method', 'profit', 'datetime']);\n    if (data.bikri && data.bikri.length > 0) {\n      var existingData = bikriSheet.getDataRange().getValues();\n      var existingKeys = {};\n      for(var x=1; x<existingData.length; x++) { existingKeys[String(existingData[x][0]).trim()] = true; }\n      data.bikri.forEach(function(r) {\n        var invNo = String(r['invoice no']).trim();\n        if (invNo && !existingKeys[invNo]) {\n            bikriSheet.appendRow([invNo, r['date'], r['customer name'], r['customer mobile'], r['location'], r['product name'], r['category'], r['cost'], r['sales'], r['discount'], r['baki'], r['payment method'], r['profit'], r['datetime']]);\n            existingKeys[invNo] = true;\n        }\n      });\n    }\n\n    var stockSheet = ss.getSheetByName('stock') || ss.insertSheet('stock');\n    stockSheet.clear();\n    stockSheet.appendRow(['id', 'name', 'category', 'stock', 'unit', 'buyPrice', 'sellPrice', 'barcode', 'repName', 'repPhone', 'datetime']);\n    if (data.stock && data.stock.length > 0) {\n        var stockRows = data.stock.map(function(p) { return [p.id, p.name, p.category, p.stock, p.unit, p.buyPrice, p.sellPrice, p.barcode, p.repName, p.repPhone, p.datetime]; });\n        stockSheet.getRange(2, 1, stockRows.length, 11).setValues(stockRows);\n    }\n\n    var bakiSheet = ss.getSheetByName('bakir khata') || ss.insertSheet('bakir khata');\n    bakiSheet.clear();\n    bakiSheet.appendRow(['id', 'name', 'phone', 'address', 'dueAmount', 'lastPurchaseDate', 'createdAt', 'status', 'datetime']);\n    if (data['bakir khata'] && data['bakir khata'].length > 0) {\n        var bakiRows = data['bakir khata'].map(function(c) { return [c.id, c.name, c.phone, c.address, c.dueAmount, c.lastPurchaseDate, c.createdAt, c.status, c.datetime]; });\n        bakiSheet.getRange(2, 1, bakiRows.length, 9).setValues(bakiRows);\n    }\n\n    var catSheet = ss.getSheetByName('catgeory') || ss.insertSheet('catgeory');\n    catSheet.clear(); catSheet.appendRow(['category_name', 'datetime']);\n    if (data.catgeory && data.catgeory.length > 0) {\n      var catRows = data.catgeory.map(function(cat) { return [cat.category_name, cat.datetime]; });\n      catSheet.getRange(2, 1, catRows.length, 2).setValues(catRows);\n    }\n\n    var unitsSheet = ss.getSheetByName('units') || ss.insertSheet('units');\n    unitsSheet.clear(); unitsSheet.appendRow(['unit_name', 'datetime']);\n    if (data.units && data.units.length > 0) {\n      var unitRows = data.units.map(function(u) { return [u.unit_name, u.datetime]; });\n      unitsSheet.getRange(2, 1, unitRows.length, 2).setValues(unitRows);\n    }\n\n    return ContentService.createTextOutput(JSON.stringify({ success: true })).setMimeType(ContentService.MimeType.JSON);\n  } catch (err) {\n    return ContentService.createTextOutput(JSON.stringify({ success: false, error: err.toString() })).setMimeType(ContentService.MimeType.JSON);\n  } finally {\n    lock.releaseLock();\n  }\n}`;
+                    const scriptCode = `function doPost(e) { return handleRequest(e); }\nfunction doGet(e) {\n  var action = e.parameter.action;\n  if (action === 'getData') {\n    var ss = SpreadsheetApp.getActiveSpreadsheet();\n    var result = { success: true };\n    var tabs = ['bikri', 'stock', 'bakir khata', 'category', 'units'];\n    tabs.forEach(function(tabName) {\n      var sheet = ss.getSheetByName(tabName);\n      if (sheet) {\n        var data = sheet.getDataRange().getValues();\n        var headers = data[0];\n        var rows = [];\n        for (var i = 1; i < data.length; i++) {\n          var obj = {};\n          var hasData = false;\n          for (var j = 0; j < headers.length; j++) { obj[headers[j]] = data[i][j]; if (data[i][j] !== "") hasData = true; }\n          if (hasData) rows.push(obj);\n        }\n        var cleanName = tabName.replace(' ', '_');\n        result[cleanName] = rows;\n      }\n    });\n    return ContentService.createTextOutput(JSON.stringify(result)).setMimeType(ContentService.MimeType.JSON);\n  }\n  return ContentService.createTextOutput(JSON.stringify({ success: false, error: 'Invalid action' })).setMimeType(ContentService.MimeType.JSON);\n}\n\nfunction handleRequest(e) {\n  var lock = LockService.getScriptLock();\n  try {\n    lock.waitLock(30000);\n    var ss = SpreadsheetApp.getActiveSpreadsheet();\n    var data = JSON.parse(e.postData.contents);\n    var syncTime = data.timestamp || new Date().toISOString();\n\n    var bikriSheet = ss.getSheetByName('bikri') || ss.insertSheet('bikri');\n    if(bikriSheet.getLastRow() === 0) bikriSheet.appendRow(['invoice no', 'date', 'customer name', 'customer mobile', 'location', 'product name', 'category', 'cost', 'sales', 'discount', 'baki', 'payment method', 'profit', 'datetime']);\n    if (data.bikri && data.bikri.length > 0) {\n      var existingData = bikriSheet.getDataRange().getValues();\n      var existingKeys = {};\n      for(var x=1; x<existingData.length; x++) { existingKeys[String(existingData[x][0]).trim()] = true; }\n      data.bikri.forEach(function(r) {\n        var invNo = String(r['invoice no']).trim();\n        if (invNo && !existingKeys[invNo]) {\n            bikriSheet.appendRow([invNo, r['date'], r['customer name'], r['customer mobile'], r['location'], r['product name'], r['category'], r['cost'], r['sales'], r['discount'], r['baki'], r['payment method'], r['profit'], r['datetime']]);\n            existingKeys[invNo] = true;\n        }\n      });\n    }\n\n    var stockSheet = ss.getSheetByName('stock') || ss.insertSheet('stock');\n    stockSheet.clear();\n    stockSheet.appendRow(['id', 'name', 'category', 'stock', 'unit', 'buyPrice', 'sellPrice', 'barcode', 'repName', 'repPhone', 'datetime']);\n    if (data.stock && data.stock.length > 0) {\n        var stockRows = data.stock.map(function(p) { return [p.id, p.name, p.category, p.stock, p.unit, p.buyPrice, p.sellPrice, p.barcode, p.repName, p.repPhone, p.datetime]; });\n        stockSheet.getRange(2, 1, stockRows.length, 11).setValues(stockRows);\n    }\n\n    var bakiSheet = ss.getSheetByName('bakir khata') || ss.insertSheet('bakir khata');\n    bakiSheet.clear();\n    bakiSheet.appendRow(['id', 'name', 'phone', 'address', 'dueAmount', 'lastPurchaseDate', 'createdAt', 'status', 'datetime']);\n    if (data['bakir khata'] && data['bakir khata'].length > 0) {\n        var bakiRows = data['bakir khata'].map(function(c) { return [c.id, c.name, c.phone, c.address, c.dueAmount, c.lastPurchaseDate, c.createdAt, c.status, c.datetime]; });\n        bakiSheet.getRange(2, 1, bakiRows.length, 9).setValues(bakiRows);\n    }\n\n    var catSheet = ss.getSheetByName('category') || ss.insertSheet('category');\n    catSheet.clear(); catSheet.appendRow(['category_name', 'datetime']);\n    if (data.category && data.category.length > 0) {\n      var catRows = data.category.map(function(cat) { return [cat.category_name, cat.datetime]; });\n      catSheet.getRange(2, 1, catRows.length, 2).setValues(catRows);\n    }\n\n    var unitsSheet = ss.getSheetByName('units') || ss.insertSheet('units');\n    unitsSheet.clear(); unitsSheet.appendRow(['unit_name', 'datetime']);\n    if (data.units && data.units.length > 0) {\n      var unitRows = data.units.map(function(u) { return [u.unit_name, u.datetime]; });\n      unitsSheet.getRange(2, 1, unitRows.length, 2).setValues(unitRows);\n    }\n\n    return ContentService.createTextOutput(JSON.stringify({ success: true })).setMimeType(ContentService.MimeType.JSON);\n  } catch (err) {\n    return ContentService.createTextOutput(JSON.stringify({ success: false, error: err.toString() })).setMimeType(ContentService.MimeType.JSON);\n  } finally {\n    lock.releaseLock();\n  }\n}`;
                     navigator.clipboard.writeText(scriptCode);
                     alert('কোড কপি করা হয়েছে!');
                   }}

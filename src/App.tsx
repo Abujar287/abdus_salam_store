@@ -276,9 +276,35 @@ export default function App() {
       };
 
       const jsonStr = JSON.stringify(payload);
-      const encodedData = encodeURIComponent(jsonStr);
 
-      // Method 1: Standard POST text/plain
+      // Method 1: Form submission to hidden iframe (bypasses CORS restrictions & Google Apps Script 302 redirects)
+      let iframe = document.getElementById('gscript_sync_target_iframe') as HTMLIFrameElement;
+      if (!iframe) {
+        iframe = document.createElement('iframe');
+        iframe.id = 'gscript_sync_target_iframe';
+        iframe.name = 'gscript_sync_target_iframe';
+        iframe.style.display = 'none';
+        document.body.appendChild(iframe);
+      }
+
+      const form = document.createElement('form');
+      form.method = 'POST';
+      form.action = GOOGLE_SHEET_WEB_APP_URL;
+      form.target = 'gscript_sync_target_iframe';
+
+      const input = document.createElement('input');
+      input.type = 'hidden';
+      input.name = 'data';
+      input.value = jsonStr;
+      form.appendChild(input);
+
+      document.body.appendChild(form);
+      form.submit();
+      setTimeout(() => {
+        try { document.body.removeChild(form); } catch(e){}
+      }, 500);
+
+      // Method 2: Fetch POST fallback
       fetch(GOOGLE_SHEET_WEB_APP_URL, {
         method: 'POST',
         mode: 'no-cors',
@@ -286,16 +312,8 @@ export default function App() {
         body: jsonStr
       }).catch(() => {});
 
-      // Method 2: POST form-urlencoded
-      fetch(GOOGLE_SHEET_WEB_APP_URL, {
-        method: 'POST',
-        mode: 'no-cors',
-        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-        body: 'data=' + encodedData
-      }).catch(() => {});
-
-      // Method 3: GET query parameter
-      fetch(`${GOOGLE_SHEET_WEB_APP_URL}?action=syncData&data=${encodedData}`, {
+      // Method 3: Fetch GET fallback
+      fetch(`${GOOGLE_SHEET_WEB_APP_URL}?action=syncData&data=${encodeURIComponent(jsonStr)}`, {
         method: 'GET',
         mode: 'no-cors'
       }).catch(() => {});
@@ -303,8 +321,20 @@ export default function App() {
     } catch (err) {
       console.error("Sync error:", err);
     } finally {
-      setIsSyncing(false);
-      setSyncTime('28-Oct-2026 3:58PM');
+      setTimeout(() => {
+        setIsSyncing(false);
+        const now = new Date();
+        const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+        const day = now.getDate();
+        const month = monthNames[now.getMonth()];
+        const year = now.getFullYear();
+        let hours = now.getHours();
+        const minutes = now.getMinutes() < 10 ? `0${now.getMinutes()}` : now.getMinutes();
+        const ampm = hours >= 12 ? 'PM' : 'AM';
+        hours = hours % 12;
+        hours = hours ? hours : 12;
+        setSyncTime(`${day}-${month}-${year} ${hours}:${minutes}${ampm}`);
+      }, 800);
     }
   };
 
@@ -1420,6 +1450,20 @@ export default function App() {
                     <span className="font-medium text-gray-800">ব্লুটুথ থার্মাল প্রিন্টার সেটিংস</span>
                   </div>
                   <ChevronRight className="w-4 h-4 text-gray-400" />
+                </button>
+
+                <button 
+                  onClick={() => setIsScriptModalOpen(true)}
+                  className="w-full p-3.5 flex items-center justify-between hover:bg-[#1B7A5E]/5 transition text-left border-l-4 border-l-[#1B7A5E]"
+                >
+                  <div className="flex items-center space-x-3">
+                    <FileText className="w-4 h-4 text-[#1B7A5E]" />
+                    <div>
+                      <span className="font-bold text-gray-900 block">গুগল শিট স্ক্রিপ্ট কোড (Google Apps Script)</span>
+                      <span className="text-[10px] text-gray-500 block">bikri, stock, bakir khata, catgeory ট্যাব তৈরির কোড কপির সুবিধা</span>
+                    </div>
+                  </div>
+                  <ChevronRight className="w-4 h-4 text-[#1B7A5E]" />
                 </button>
 
                 <button 

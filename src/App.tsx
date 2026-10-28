@@ -61,6 +61,8 @@ const STORE_NAME = 'আব্দুস সালাম স্টোর';
 const STORE_PHONE = '01969249225';
 const STORE_ADDRESS = 'রায়পুর বাজার, বাঘারপাড়া, যশোর';
 const DEFAULT_SHEET_URL = 'https://script.google.com/macros/s/AKfycbx6qXyoYua4tUchRlaa0mH78EXxgbvmRWmVpWfxv5v4_At4_QGvwS13H8ruZf1J3bGBeA/exec';
+const BUILD_VERSION = '2026.10.28.2';
+
 
 /// Types
 interface Product {
@@ -155,20 +157,26 @@ export default function App() {
       if (dateVal instanceof Date) {
         d = dateVal;
       } else if (typeof dateVal === 'string') {
-        // Handle '28-Oct-26' format
-        const parts = dateVal.split('-');
-        if (parts.length === 3) {
-          const day = parseInt(parts[0]);
-          const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-          const month = monthNames.indexOf(parts[1]);
-          const year = 2000 + parseInt(parts[2]);
-          if (month !== -1) {
-            d = new Date(year, month, day);
+        // Handle ISO strings
+        if (dateVal.includes('T')) {
+          d = new Date(dateVal);
+        } else {
+          // Handle '28-Oct-26' format
+          const parts = dateVal.split('-');
+          if (parts.length === 3) {
+            const day = parseInt(parts[0]);
+            const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+            const month = monthNames.indexOf(parts[1]);
+            let year = parseInt(parts[2]);
+            if (year < 100) year += 2000;
+            if (month !== -1) {
+              d = new Date(year, month, day);
+            } else {
+              d = new Date(dateVal);
+            }
           } else {
             d = new Date(dateVal);
           }
-        } else {
-          d = new Date(dateVal);
         }
       } else {
         d = new Date(dateVal);
@@ -176,6 +184,7 @@ export default function App() {
 
       if (isNaN(d.getTime())) return String(dateVal);
       
+      // Use local date parts to avoid UTC shift issues
       const y = d.getFullYear();
       const m = String(d.getMonth() + 1).padStart(2, '0');
       const day = String(d.getDate()).padStart(2, '0');
@@ -452,7 +461,7 @@ export default function App() {
         if (result.bikri && result.bikri.length > 0) {
           const fetchedOrdersMap: { [key: string]: Order } = {};
           result.bikri.forEach((o: any) => {
-            const invNo = String(o['invoice no'] || '').trim();
+            const invNo = String(o['invoice no'] || o.invoice_no || '').trim();
             if (!invNo) return;
 
             let displayDate = String(o.date || '');
@@ -468,24 +477,29 @@ export default function App() {
               fetchedOrdersMap[invNo] = {
                 id: `ord-sync-${invNo}`,
                 invoiceNo: invNo,
-                customerName: String(o['customer name'] || 'নগদ ক্রেতা').trim(),
-                customerPhone: String(o['customer mobile'] || '-').trim(),
+                customerName: String(o['customer name'] || o.customer_name || 'নগদ ক্রেতা').trim(),
+                customerPhone: String(o['customer mobile'] || o.customer_mobile || '-').trim(),
                 items: [], 
-                subtotal: Number(o.sales) || 0,
-                discount: Number(o.discount) || 0,
-                total: Number(o.sales) || 0,
-                due: Number(o.baki) || 0,
-                paid: (Number(o.sales) || 0) - (Number(o.baki) || 0),
-                paymentType: o['payment method'] || 'cash',
+                subtotal: Number(o.sales || o.total || 0),
+                discount: Number(o.discount || 0),
+                total: Number(o.sales || o.total || 0),
+                due: Number(o.baki || o.due || 0),
+                paid: (Number(o.sales || o.total || 0)) - (Number(o.baki || o.due || 0)),
+                paymentType: o['payment method'] || o.payment_method || 'cash',
                 date: displayDate,
                 rawDate: rawDate,
-                status: Number(o.baki) > 0 ? 'pending' : 'completed',
-                profit: Number(o.profit) || 0
+                status: Number(o.baki || o.due || 0) > 0 ? 'pending' : 'completed',
+                profit: Number(o.profit || 0)
               };
             }
           });
           
-          const sortedOrders = Object.values(fetchedOrdersMap).sort((a, b) => b.invoiceNo.localeCompare(a.invoiceNo));
+          const sortedOrders = Object.values(fetchedOrdersMap).sort((a, b) => {
+            const dateA = new Date(a.rawDate).getTime();
+            const dateB = new Date(b.rawDate).getTime();
+            if (dateA !== dateB) return dateB - dateA;
+            return b.invoiceNo.localeCompare(a.invoiceNo);
+          });
           setOrders(uniqueById(sortedOrders));
         }
         return true;
@@ -731,9 +745,9 @@ export default function App() {
     const updatedOrders = [order, ...orders];
 
     // Apply states
-    setProducts(updatedProducts);
-    setCustomers(updatedCustomers);
-    setOrders(updatedOrders);
+    setProducts(uniqueById(updatedProducts));
+    setCustomers(uniqueById(updatedCustomers));
+    setOrders(uniqueById(updatedOrders));
     
     setSuccessModal(order);
     setPrintPreviewOrder(null);
@@ -1837,6 +1851,21 @@ export default function App() {
                 </button>
               </div>
 
+              <div className="mt-8 pt-4 border-t border-gray-100 flex flex-col items-center space-y-2 opacity-50">
+                <p className="text-[10px] text-gray-400 font-bold">App Version: {BUILD_VERSION}</p>
+                <button 
+                  onClick={() => {
+                    if (confirm('আপনি কি নিশ্চিত যে আপনি লোকাল ডাটা ক্লিয়ার করতে চান? এতে শুধু আপনার ফোনের লোকাল ডাটা ক্লিয়ার হবে, শিটের ডাটা থাকবে।')) {
+                      localStorage.clear();
+                      window.location.reload();
+                    }
+                  }}
+                  className="text-[9px] text-red-500 border border-red-100 px-2 py-1 rounded-lg hover:bg-red-50"
+                >
+                  Clear Local Cache
+                </button>
+              </div>
+
               {/* App Version Info */}
               <div className="text-center pt-2">
                 <p className="text-[11px] text-gray-400">{STORE_NAME} v2.7.3 • বাংলা ভার্সন</p>
@@ -2392,7 +2421,79 @@ function handleRequest(e) {
               <div className="flex gap-2 pt-1">
                 <button 
                    onClick={() => {
-                    const scriptCode = `function doPost(e) { return handleRequest(e); }\nfunction doGet(e) {\n  var action = e.parameter.action;\n  if (action === 'getData') {\n    var ss = SpreadsheetApp.getActiveSpreadsheet();\n    var result = { success: true };\n    var tabs = ['bikri', 'stock', 'bakir khata', 'category', 'units'];\n    tabs.forEach(function(tabName) {\n      var sheet = ss.getSheetByName(tabName);\n      if (sheet) {\n        var data = sheet.getDataRange().getValues();\n        var headers = data[0];\n        var rows = [];\n        for (var i = 1; i < data.length; i++) {\n          var obj = {};\n          var hasData = false;\n          for (var j = 0; j < headers.length; j++) { obj[headers[j]] = data[i][j]; if (data[i][j] !== "") hasData = true; }\n          if (hasData) rows.push(obj);\n        }\n        var cleanName = tabName.replace(' ', '_');\n        result[cleanName] = rows;\n      }\n    });\n    return ContentService.createTextOutput(JSON.stringify(result)).setMimeType(ContentService.MimeType.JSON);\n  }\n  return ContentService.createTextOutput(JSON.stringify({ success: false, error: 'Invalid action' })).setMimeType(ContentService.MimeType.JSON);\n}\n\nfunction handleRequest(e) {\n  var lock = LockService.getScriptLock();\n  try {\n    lock.waitLock(30000);\n    var ss = SpreadsheetApp.getActiveSpreadsheet();\n    var data = JSON.parse(e.postData.contents);\n    var syncTime = data.timestamp || new Date().toISOString();\n\n    var bikriSheet = ss.getSheetByName('bikri') || ss.insertSheet('bikri');\n    if(bikriSheet.getLastRow() === 0) bikriSheet.appendRow(['invoice no', 'date', 'customer name', 'customer mobile', 'location', 'product name', 'category', 'cost', 'sales', 'discount', 'baki', 'payment method', 'profit', 'datetime']);\n    if (data.bikri && data.bikri.length > 0) {\n      var existingData = bikriSheet.getDataRange().getValues();\n      var existingKeys = {};\n      for(var x=1; x<existingData.length; x++) { existingKeys[String(existingData[x][0]).trim()] = true; }\n      data.bikri.forEach(function(r) {\n        var invNo = String(r['invoice no']).trim();\n        if (invNo && !existingKeys[invNo]) {\n            bikriSheet.appendRow([invNo, r['date'], r['customer name'], r['customer mobile'], r['location'], r['product name'], r['category'], r['cost'], r['sales'], r['discount'], r['baki'], r['payment method'], r['profit'], r['datetime']]);\n            existingKeys[invNo] = true;\n        }\n      });\n    }\n\n    var stockSheet = ss.getSheetByName('stock') || ss.insertSheet('stock');\n    stockSheet.clear();\n    stockSheet.appendRow(['id', 'name', 'category', 'stock', 'unit', 'buyPrice', 'sellPrice', 'barcode', 'repName', 'repPhone', 'datetime']);\n    if (data.stock && data.stock.length > 0) {\n        var stockRows = data.stock.map(function(p) { return [p.id, p.name, p.category, p.stock, p.unit, p.buyPrice, p.sellPrice, p.barcode, p.repName, p.repPhone, p.datetime]; });\n        stockSheet.getRange(2, 1, stockRows.length, 11).setValues(stockRows);\n    }\n\n    var bakiSheet = ss.getSheetByName('bakir khata') || ss.insertSheet('bakir khata');\n    bakiSheet.clear();\n    bakiSheet.appendRow(['id', 'name', 'phone', 'address', 'dueAmount', 'lastPurchaseDate', 'createdAt', 'status', 'datetime']);\n    if (data['bakir khata'] && data['bakir khata'].length > 0) {\n        var bakiRows = data['bakir khata'].map(function(c) { return [c.id, c.name, c.phone, c.address, c.dueAmount, c.lastPurchaseDate, c.createdAt, c.status, c.datetime]; });\n        bakiSheet.getRange(2, 1, bakiRows.length, 9).setValues(bakiRows);\n    }\n\n    var catSheet = ss.getSheetByName('category') || ss.insertSheet('category');\n    catSheet.clear(); catSheet.appendRow(['category_name', 'datetime']);\n    if (data.category && data.category.length > 0) {\n      var catRows = data.category.map(function(cat) { return [cat.category_name, cat.datetime]; });\n      catSheet.getRange(2, 1, catRows.length, 2).setValues(catRows);\n    }\n\n    var unitsSheet = ss.getSheetByName('units') || ss.insertSheet('units');\n    unitsSheet.clear(); unitsSheet.appendRow(['unit_name', 'datetime']);\n    if (data.units && data.units.length > 0) {\n      var unitRows = data.units.map(function(u) { return [u.unit_name, u.datetime]; });\n      unitsSheet.getRange(2, 1, unitRows.length, 2).setValues(unitRows);\n    }\n\n    return ContentService.createTextOutput(JSON.stringify({ success: true })).setMimeType(ContentService.MimeType.JSON);\n  } catch (err) {\n    return ContentService.createTextOutput(JSON.stringify({ success: false, error: err.toString() })).setMimeType(ContentService.MimeType.JSON);\n  } finally {\n    lock.releaseLock();\n  }\n}`;
+                    const scriptCode = `function doGet(e) {
+  const action = e.parameter.action;
+  const sheet = SpreadsheetApp.getActiveSpreadsheet();
+  if (action === 'getData') {
+    return ContentService.createTextOutput(JSON.stringify({
+      success: true,
+      stock: getSheetData(sheet, 'stock'),
+      bikri: getSheetData(sheet, 'bikri'),
+      bakir_khata: getSheetData(sheet, 'bakir khata'),
+      category: getSheetData(sheet, 'category'),
+      units: getSheetData(sheet, 'units')
+    })).setMimeType(ContentService.MimeType.JSON);
+  }
+}
+
+function doPost(e) {
+  try {
+    const data = JSON.parse(e.postData.contents);
+    const action = data.action;
+    const sheet = SpreadsheetApp.getActiveSpreadsheet();
+    if (action === 'syncData') {
+      if (data.bikri) updateSheet(sheet, 'bikri', data.bikri);
+      if (data.stock) updateSheet(sheet, 'stock', data.stock);
+      if (data['bakir khata']) updateSheet(sheet, 'bakir khata', data['bakir khata']);
+      if (data.category) updateSheet(sheet, 'category', data.category);
+      if (data.units) updateSheet(sheet, 'units', data.units);
+      return ContentService.createTextOutput(JSON.stringify({ success: true }))
+        .setMimeType(ContentService.MimeType.JSON);
+    }
+    return ContentService.createTextOutput(JSON.stringify({ success: false, error: 'Invalid action' }))
+      .setMimeType(ContentService.MimeType.JSON);
+  } catch (err) {
+    return ContentService.createTextOutput(JSON.stringify({ success: false, error: err.toString() }))
+      .setMimeType(ContentService.MimeType.JSON);
+  }
+}
+
+function getSheetData(ss, sheetName) {
+  let sheet = ss.getSheetByName(sheetName);
+  if (!sheet) { sheet = ss.insertSheet(sheetName); return []; }
+  const data = sheet.getDataRange().getValues();
+  if (data.length < 2) return [];
+  const headers = data[0];
+  const rows = data.slice(1);
+  return rows.map(row => {
+    const obj = {};
+    headers.forEach((header, i) => {
+      let val = row[i];
+      if (val instanceof Date) { val = val.toISOString(); }
+      obj[header.toString().toLowerCase().trim()] = val;
+    });
+    return obj;
+  });
+}
+
+function updateSheet(ss, sheetName, data) {
+  let sheet = ss.getSheetByName(sheetName);
+  if (!sheet) { sheet = ss.insertSheet(sheetName); }
+  sheet.clear();
+  if (data.length === 0) return;
+  const headers = Object.keys(data[0]);
+  sheet.getRange(1, 1, 1, headers.length).setValues([headers]);
+  const values = data.map(row => {
+    return headers.map(header => {
+      let val = row[header];
+      if (Array.isArray(val)) return JSON.stringify(val);
+      if (typeof val === 'object' && val !== null) return JSON.stringify(val);
+      return val;
+    });
+  });
+  sheet.getRange(2, 1, values.length, headers.length).setValues(values);
+}`;
+
                     navigator.clipboard.writeText(scriptCode);
                     alert('কোড কপি করা হয়েছে!');
                   }}

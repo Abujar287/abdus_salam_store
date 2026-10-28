@@ -4,6 +4,7 @@
  */
 
 import React, { useState, useEffect } from 'react';
+import { usePWAInstall } from './usePWAInstall';
 import {
   Store,
   ShoppingCart,
@@ -169,6 +170,63 @@ const INITIAL_ORDERS: Order[] = [
     date: '28-Oct-26',
     rawDate: '2026-10-28',
     status: 'completed'
+  },
+  {
+    id: 'ord-099',
+    invoiceNo: 'SAL-2026-099',
+    customerName: 'করিম উদ্দিন',
+    customerPhone: '01822345678',
+    items: [
+      { product: INITIAL_PRODUCTS[1], quantity: 5 },
+      { product: INITIAL_PRODUCTS[3], quantity: 2 }
+    ],
+    subtotal: 1135,
+    discount: 35,
+    total: 1100,
+    paid: 1100,
+    due: 0,
+    paymentType: 'cash',
+    date: '27-Oct-26',
+    rawDate: '2026-10-27',
+    status: 'completed'
+  },
+  {
+    id: 'ord-098',
+    invoiceNo: 'SAL-2026-098',
+    customerName: 'আব্দুল জব্বার',
+    customerPhone: '01644567890',
+    items: [
+      { product: INITIAL_PRODUCTS[0], quantity: 2 },
+      { product: INITIAL_PRODUCTS[4], quantity: 1 }
+    ],
+    subtotal: 7850,
+    discount: 150,
+    total: 7700,
+    paid: 5000,
+    due: 2700,
+    paymentType: 'credit',
+    date: '26-Oct-26',
+    rawDate: '2026-10-26',
+    status: 'pending'
+  },
+  {
+    id: 'ord-097',
+    invoiceNo: 'SAL-2026-097',
+    customerName: 'আমেনা বেগম',
+    customerPhone: '01933456789',
+    items: [
+      { product: INITIAL_PRODUCTS[6], quantity: 5 },
+      { product: INITIAL_PRODUCTS[7], quantity: 4 }
+    ],
+    subtotal: 420,
+    discount: 20,
+    total: 400,
+    paid: 400,
+    due: 0,
+    paymentType: 'cash',
+    date: '25-Oct-26',
+    rawDate: '2026-10-25',
+    status: 'completed'
   }
 ];
 
@@ -213,6 +271,22 @@ export default function App() {
   
   const [printPreviewOrder, setPrintPreviewOrder] = useState<Order | null>(null);
   const [successModal, setSuccessModal] = useState<Order | null>(null);
+  const [isCartModalOpen, setIsCartModalOpen] = useState<boolean>(false);
+
+  // PWA Install State & Handlers
+  const { isInstallable, isInstalled, isIOS, install } = usePWAInstall();
+  const [showIOSGuide, setShowIOSGuide] = useState<boolean>(false);
+  const [showPWAInstructionModal, setShowPWAInstructionModal] = useState<boolean>(false);
+
+  const handleInstallClick = async () => {
+    if (isInstallable) {
+      await install();
+    } else if (isIOS) {
+      setShowIOSGuide(true);
+    } else {
+      setShowPWAInstructionModal(true);
+    }
+  };
 
   // Categories & Units Lists
   const [categoriesList, setCategoriesList] = useState<string[]>([
@@ -250,10 +324,15 @@ export default function App() {
   const handleSync = async () => {
     setIsSyncing(true);
     try {
-      const formattedBikri = orders.flatMap(o => 
-        o.items.map(item => ({
+      const formattedBikri = orders.flatMap(o => {
+        const custObj = customers.find(c => c.name === o.customerName);
+        const custLoc = custObj ? custObj.address : 'রায়পুর বাজার';
+        return o.items.map(item => ({
           'invoice no': o.invoiceNo,
           'date': o.date,
+          'customer name': o.customerName,
+          'customer mobile': o.customerPhone,
+          'location': custLoc,
           'product name': item.product.name,
           'category': item.product.category,
           'cost': item.product.buyPrice * item.quantity,
@@ -262,8 +341,8 @@ export default function App() {
           'baki': Math.round(o.due / o.items.length),
           'payment method': o.paymentType,
           'profit': (item.product.sellPrice - item.product.buyPrice) * item.quantity
-        }))
-      );
+        }));
+      });
 
       const payload = {
         action: 'syncData',
@@ -564,10 +643,10 @@ export default function App() {
     <div className="min-h-screen bg-[#F3F4F6] text-gray-900 font-['Hind_Siliguri',sans-serif] flex flex-col items-center">
       
       {/* Main Container wrapper: automatically adapts to mobile frame when width < 768px, or widescreen desktop when >= 768px */}
-      <div className={`w-full transition-all duration-300 ${isMobileView ? 'max-w-md my-0 md:my-4 shadow-2xl rounded-none md:rounded-3xl overflow-hidden bg-[#F3F4F6] relative min-h-screen md:min-h-[844px] flex flex-col' : 'max-w-6xl my-4 shadow-2xl rounded-2xl bg-[#F3F4F6] relative min-h-[900px] flex flex-col border border-gray-200'}`}>
+      <div className={`w-full transition-all duration-300 ${isMobileView ? 'max-w-md my-0 md:my-4 shadow-2xl rounded-none md:rounded-3xl overflow-hidden bg-[#F3F4F6] relative min-h-screen md:min-h-[844px] flex flex-col' : 'w-full min-h-screen bg-[#F3F4F6] relative flex flex-col shadow-none rounded-none border-none'}`}>
         
-        {/* App Header */}
-        <div className="bg-[#113F33] text-white px-3 py-2.5 shadow-md flex items-center justify-between">
+        {/* App Header (Sticky Top) */}
+        <div className="sticky top-0 z-30 bg-[#113F33] text-white px-3 py-2.5 shadow-md flex items-center justify-between">
           <div className="flex items-center space-x-2.5 min-w-0">
             <div className="w-9 h-9 rounded-xl bg-white p-0.5 shadow-md overflow-hidden flex-shrink-0 flex items-center justify-center border border-[#1B7A5E]">
               <img 
@@ -588,19 +667,21 @@ export default function App() {
           </div>
           
           <div className="flex items-center gap-1.5 flex-shrink-0">
+            {!isInstalled && (
+              <button 
+                onClick={handleInstallClick}
+                className="flex items-center gap-1 bg-amber-500 hover:bg-amber-600 text-white px-2 py-1 rounded-lg transition text-[10px] font-bold shadow animate-pulse"
+              >
+                <Download className="w-3 h-3" />
+                <span>ইন্সটল</span>
+              </button>
+            )}
             <button 
               onClick={handleSync}
-              className="flex items-center gap-1 bg-[#1B7A5E] hover:bg-[#155e48] text-white px-2 py-0.5 rounded-lg transition text-[9px] shadow-sm font-medium"
+              className="flex items-center gap-1 bg-[#1B7A5E] hover:bg-[#155e48] text-white px-2 py-1 rounded-lg transition text-[9px] shadow-sm font-medium"
             >
               <RefreshCw className={`w-2.5 h-2.5 ${isSyncing ? 'animate-spin' : ''}`} />
               <span className="whitespace-nowrap">Last Sync: {syncTime}</span>
-            </button>
-            <button 
-              onClick={() => setIsScriptModalOpen(true)}
-              title="গুগল শিট স্ক্রিপ্ট কোড দেখুন"
-              className="p-1 rounded-lg bg-[#1B7A5E]/80 hover:bg-[#1B7A5E] text-white transition text-[10px]"
-            >
-              <FileText className="w-3.5 h-3.5" />
             </button>
           </div>
         </div>
@@ -910,8 +991,8 @@ export default function App() {
                 </div>
               </div>
 
-              {/* Product Grid */}
-              <div className={`grid gap-2.5 ${!isMobileView ? 'grid-cols-4' : 'grid-cols-2'}`}>
+              {/* Product Grid - Ultra Compact Layout */}
+              <div className={`grid gap-1.5 ${!isMobileView ? 'grid-cols-4 md:grid-cols-5' : 'grid-cols-2'}`}>
                 {products
                   .filter(p => selectedCategoryFilter === 'সব' || p.category === selectedCategoryFilter)
                   .filter(p => matchesProductSearch(p, posSearchQuery))
@@ -921,29 +1002,26 @@ export default function App() {
                       <div 
                         key={product.id}
                         onClick={() => addToCart(product)}
-                        className="bg-white p-3 rounded-2xl shadow-sm border border-gray-200 hover:border-[#1B7A5E] transition cursor-pointer flex flex-col justify-between group relative"
+                        className="bg-white p-2 rounded-xl shadow-xs border border-gray-200 hover:border-[#1B7A5E] transition cursor-pointer flex flex-col justify-between group active:scale-98 relative"
                       >
                         <div>
-                          <div className="flex justify-between items-start mb-1 gap-1">
-                            <span className="text-[10px] bg-gray-100 text-gray-600 px-1.5 py-0.5 rounded font-medium whitespace-nowrap">
+                          <div className="flex justify-between items-center mb-1 gap-1 text-[9px]">
+                            <span className="bg-gray-100 text-gray-600 px-1 py-0.2 rounded truncate">
                               {product.category}
                             </span>
-                            <span className={`text-[10px] px-1.5 py-0.5 rounded font-medium whitespace-nowrap ${isLow ? 'bg-[#FEF3C7] text-[#D97706]' : 'bg-[#D1FAE5] text-[#059669]'}`}>
-                              স্টক: {product.stock} {product.unit}
+                            <span className={`px-1 py-0.2 rounded font-medium truncate ${isLow ? 'bg-[#FEF3C7] text-[#D97706]' : 'bg-[#D1FAE5] text-[#059669]'}`}>
+                              {product.stock} {product.unit}
                             </span>
                           </div>
-                          <h4 className="font-semibold text-xs text-gray-900 line-clamp-2 mt-1 group-hover:text-[#1B7A5E] transition">
+                          <h4 className="font-bold text-[11px] text-gray-900 line-clamp-2 leading-tight group-hover:text-[#1B7A5E] transition">
                             {product.name}
                           </h4>
                         </div>
 
-                        <div className="flex items-center justify-between mt-3 pt-2 border-t border-gray-100">
-                          <div>
-                            <span className="text-[10px] text-gray-400">মূল্য</span>
-                            <div className="font-bold text-sm text-[#113F33]">{product.sellPrice}</div>
-                          </div>
-                          <button className="w-7 h-7 rounded-xl bg-[#1B7A5E] text-white flex items-center justify-center shadow hover:bg-[#113F33] transition">
-                            <Plus className="w-4 h-4" />
+                        <div className="flex items-center justify-between mt-2 pt-1 border-t border-gray-100">
+                          <span className="font-bold text-xs text-[#113F33]">{product.sellPrice}</span>
+                          <button className="w-5 h-5 rounded-lg bg-[#1B7A5E] text-white flex items-center justify-center shadow-xs hover:bg-[#113F33] transition">
+                            <Plus className="w-3 h-3" />
                           </button>
                         </div>
                       </div>
@@ -951,83 +1029,28 @@ export default function App() {
                   })}
               </div>
 
-              {/* Cart Drawer / Bottom Summary */}
+              {/* Floating Bottom Cart Bar */}
               {cart.length > 0 && (
-                <div className="bg-white rounded-2xl shadow-lg border-2 border-[#1B7A5E] p-4 space-y-3 mt-4">
-                  <div className="flex justify-between items-center border-b border-gray-100 pb-2">
-                    <h3 className="font-bold text-sm text-gray-900 flex items-center gap-1.5">
-                      <ShoppingCart className="w-4 h-4 text-[#1B7A5E]" /> কার্ট লিস্ট ({cart.reduce((s, i) => s + i.quantity, 0)})
-                    </h3>
-                    <button onClick={() => setCart([])} className="text-xs text-red-500 hover:underline">
-                      সব মুছুন
-                    </button>
-                  </div>
-
-                  {/* Cart items list */}
-                  <div className="max-h-36 overflow-y-auto space-y-2 pr-1">
-                    {cart.map(item => (
-                      <div key={item.product.id} className="flex items-center justify-between bg-gray-50 p-2 rounded-xl">
-                        <div className="flex-1 pr-2">
-                          <div className="text-xs font-bold text-gray-900 line-clamp-1">{item.product.name}</div>
-                          <div className="text-[11px] text-gray-500">{item.product.sellPrice} × {item.quantity} = {item.product.sellPrice * item.quantity}</div>
-                        </div>
-                        <div className="flex items-center space-x-1.5">
-                          <button onClick={() => updateCartQuantity(item.product.id, -1)} className="w-6 h-6 rounded-lg bg-white border border-gray-300 flex items-center justify-center text-gray-700 hover:bg-gray-100">
-                            <Minus className="w-3 h-3" />
-                          </button>
-                          <span className="text-xs font-bold w-5 text-center">{item.quantity}</span>
-                          <button onClick={() => updateCartQuantity(item.product.id, 1)} className="w-6 h-6 rounded-lg bg-white border border-gray-300 flex items-center justify-center text-gray-700 hover:bg-gray-100">
-                            <Plus className="w-3 h-3" />
-                          </button>
-                          <button onClick={() => removeFromCart(item.product.id)} className="w-6 h-6 rounded-lg bg-red-50 text-red-500 flex items-center justify-center ml-1">
-                            <Trash2 className="w-3 h-3" />
-                          </button>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-
-                  {/* Discount, Totals & Paid Amount */}
-                  <div className="space-y-2 pt-2 border-t border-gray-100 text-xs">
-                    <div className="flex justify-between text-gray-600">
-                      <span>সাবটোটাল:</span>
-                      <span className="font-bold">{cartSubtotal}</span>
-                    </div>
-                    <div className="flex justify-between items-center text-gray-600">
-                      <span>কমিশন / ডিসকাউন্ট:</span>
-                      <input 
-                        type="number"
-                        value={discountInput}
-                        onChange={(e) => setDiscountInput(Math.max(0, Number(e.target.value)))}
-                        className="w-20 px-2 py-0.5 bg-gray-50 border border-gray-200 rounded text-right font-bold text-xs"
-                      />
-                    </div>
-                    <div className="flex justify-between text-sm font-bold text-[#113F33] pt-1 border-t border-dashed border-gray-200">
-                      <span>মোট প্রদেয়:</span>
-                      <span className="text-base text-emerald-700">{cartTotal}</span>
-                    </div>
-
-                    {/* নগদ জমা (Paid Amount) */}
-                    <div className="flex items-center justify-between pt-1 bg-emerald-50/70 p-2 rounded-xl border border-emerald-200">
-                      <span className="font-bold text-[#113F33] flex items-center gap-1">
-                        <DollarSign className="w-3.5 h-3.5" /> নগদ জমা (Paid):
+                <div className="sticky bottom-16 left-0 right-0 z-30 bg-[#113F33] text-white p-2.5 rounded-2xl shadow-xl flex items-center justify-between border-2 border-[#1B7A5E] mt-3">
+                  <div className="flex items-center space-x-2.5">
+                    <div className="w-8 h-8 rounded-xl bg-[#1B7A5E] flex items-center justify-center font-bold text-xs relative flex-shrink-0">
+                      <ShoppingCart className="w-4 h-4 text-white" />
+                      <span className="absolute -top-1 -right-1 bg-amber-400 text-gray-900 rounded-full w-4 h-4 text-[9px] flex items-center justify-center font-bold">
+                        {cart.reduce((s, i) => s + i.quantity, 0)}
                       </span>
-                      <input 
-                        type="number"
-                        value={cashPaidInput}
-                        placeholder={`${cartTotal} (পূর্ণ)`}
-                        onChange={(e) => setCashPaidInput(e.target.value)}
-                        className="w-28 px-2.5 py-1 bg-white border border-gray-300 rounded-lg text-right font-bold text-xs focus:outline-none focus:border-[#1B7A5E]"
-                      />
+                    </div>
+                    <div>
+                      <div className="text-xs font-bold text-white">{cartTotal.toLocaleString('en-IN')}</div>
+                      <div className="text-[10px] text-emerald-200">{cart.length} টি পণ্য কার্টে আছে</div>
                     </div>
                   </div>
-
-                  {/* Print Memo & Submit Button */}
+                  
                   <button 
-                    onClick={handlePreparePrintPreview}
-                    className="w-full py-3 rounded-xl bg-[#1B7A5E] text-white font-bold text-sm shadow hover:bg-[#113F33] transition flex items-center justify-center gap-1.5 mt-2"
+                    onClick={() => setIsCartModalOpen(true)}
+                    className="bg-[#1B7A5E] hover:bg-emerald-600 text-white font-bold text-xs px-3.5 py-1.5 rounded-xl shadow flex items-center gap-1 transition"
                   >
-                    <Printer className="w-4 h-4" /> মেমো প্রিন্ট করুন ও বিক্রি সম্পন্ন করুন
+                    <span>কার্ট দেখুন</span>
+                    <ChevronRight className="w-4 h-4" />
                   </button>
                 </div>
               )}
@@ -1359,65 +1382,71 @@ export default function App() {
                 />
               </div>
 
-              {/* Customer List (Only shows customers where dueAmount > 0) */}
-              <div className="space-y-2.5">
-                {customers
-                  .filter(c => c.dueAmount > 0)
-                  .filter(c => c.name.toLowerCase().includes(ledgerSearchQuery.toLowerCase()) || c.phone.includes(ledgerSearchQuery))
-                  .map(customer => {
-                    return (
-                      <div 
-                        key={customer.id} 
-                        className="bg-white p-3.5 rounded-2xl shadow-sm border border-gray-200 hover:border-[#1B7A5E] transition space-y-2"
-                      >
-                        <div className="flex justify-between items-start">
-                          <div className="flex items-start space-x-2.5">
-                            <div className="w-10 h-10 rounded-xl bg-[#113F33] text-white flex items-center justify-center font-bold text-sm shadow">
-                              {customer.name.charAt(0)}
-                            </div>
-                            <div>
-                              <h4 className="font-bold text-sm text-gray-900">{customer.name}</h4>
-                              <p className="text-xs text-gray-500 flex items-center gap-1 mt-0.5">
-                                <Phone className="w-3 h-3 text-gray-400" /> {customer.phone} • {customer.address}
-                              </p>
-                            </div>
+              {/* Customer Table / Row-wise Layout */}
+              <div className="bg-white rounded-2xl shadow-sm border border-gray-200 overflow-hidden">
+                <div className="p-3 bg-gray-50 border-b border-gray-200 font-bold text-[11px] text-gray-700 grid grid-cols-12 gap-1 items-center">
+                  <div className="col-span-3">গ্রাহকের নাম</div>
+                  <div className="col-span-2">মোবাইল</div>
+                  <div className="col-span-2">ঠিকানা</div>
+                  <div className="col-span-2 text-right">বাকি পরিমাণ</div>
+                  <div className="col-span-1 text-center">স্ট্যাটাস</div>
+                  <div className="col-span-2 text-right">অ্যাকশন</div>
+                </div>
+
+                <div className="divide-y divide-gray-100">
+                  {customers
+                    .filter(c => c.dueAmount > 0)
+                    .filter(c => c.name.toLowerCase().includes(ledgerSearchQuery.toLowerCase()) || c.phone.includes(ledgerSearchQuery))
+                    .map(customer => {
+                      return (
+                        <div 
+                          key={customer.id} 
+                          className="p-2.5 grid grid-cols-12 gap-1 items-center text-xs hover:bg-gray-50 transition"
+                        >
+                          <div className="col-span-3 font-bold text-gray-900 truncate" title={customer.name}>
+                            {customer.name}
+                          </div>
+                          
+                          <div className="col-span-2 text-gray-600 text-[11px] truncate">
+                            {customer.phone}
                           </div>
 
-                          <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-[#FEF3C7] text-[#D97706]">
-                            পেন্ডিং
-                          </span>
-                        </div>
+                          <div className="col-span-2 text-gray-500 text-[11px] truncate">
+                            {customer.address}
+                          </div>
 
-                        <div className="flex justify-between items-center pt-2 border-t border-gray-100 text-xs">
-                          <div>
-                            <span className="text-gray-400">বাকি পরিমাণ: </span>
-                            <span className="font-bold text-[#DC2626]">
-                              {customer.dueAmount.toLocaleString('en-IN')}
+                          <div className="col-span-2 text-right font-bold text-[#DC2626]">
+                            {customer.dueAmount.toLocaleString('en-IN')} ৳
+                          </div>
+
+                          <div className="col-span-1 text-center">
+                            <span className="px-1.5 py-0.5 rounded-full text-[9px] font-bold bg-[#FEF3C7] text-[#D97706]">
+                              পেন্ডিং
                             </span>
                           </div>
 
-                          <div className="flex space-x-2">
+                          <div className="col-span-2 flex justify-end gap-1">
                             <button 
                               onClick={() => {
                                 setDepositModalCustomer(customer);
                                 setDepositAmountInput(String(customer.dueAmount));
                               }}
-                              className="px-3 py-1.5 rounded-lg bg-emerald-50 text-[#1B7A5E] font-bold hover:bg-emerald-100 transition flex items-center gap-1"
+                              className="px-2 py-1 rounded-lg bg-emerald-50 text-[#1B7A5E] font-bold text-[10px] hover:bg-emerald-100 transition whitespace-nowrap shadow-xs"
                             >
-                              <DollarSign className="w-3 h-3" /> টাকা জমা নিন
+                              জমা নিন
                             </button>
                             <button 
                               onClick={() => alert(`${customer.name} (${customer.phone})-কে বাকি পরিশোধের এসএমএস পাঠানো হয়েছে।`)}
-                              className="p-1.5 rounded-lg bg-gray-100 text-gray-600 hover:bg-gray-200 transition"
+                              className="p-1 rounded-lg bg-gray-100 text-gray-600 hover:bg-gray-200 transition"
                               title="SMS Reminder"
                             >
-                              <Send className="w-3.5 h-3.5" />
+                              <Send className="w-3 h-3" />
                             </button>
                           </div>
                         </div>
-                      </div>
-                    );
-                  })}
+                      );
+                    })}
+                </div>
               </div>
 
             </div>
@@ -1429,8 +1458,12 @@ export default function App() {
               
               {/* Profile Card */}
               <div className="bg-white p-4 rounded-2xl shadow-sm border border-gray-200 flex items-center space-x-3">
-                <div className="w-14 h-14 rounded-2xl bg-[#113F33] text-white flex items-center justify-center font-bold text-xl shadow">
-                  আ
+                <div className="w-14 h-14 rounded-2xl bg-white p-1 shadow border border-[#1B7A5E] overflow-hidden flex items-center justify-center flex-shrink-0">
+                  <img 
+                    src="/assets/aistudio/image_2aae7fd3.png" 
+                    alt="Store Logo" 
+                    className="w-full h-full object-cover rounded-xl"
+                  />
                 </div>
                 <div>
                   <h2 className="font-bold text-base text-gray-900">{STORE_NAME}</h2>
@@ -1441,6 +1474,21 @@ export default function App() {
 
               {/* Menu Options */}
               <div className="bg-white rounded-2xl shadow-sm border border-gray-200 overflow-hidden divide-y divide-gray-100 text-xs">
+                <button 
+                  onClick={handleInstallClick}
+                  className="w-full p-3.5 flex items-center justify-between hover:bg-amber-50/60 transition text-left border-l-4 border-l-amber-500"
+                >
+                  <div className="flex items-center space-x-3">
+                    <Download className="w-4 h-4 text-amber-600" />
+                    <div>
+                      <span className="font-bold text-gray-900 block">মোবাইলে অ্যাপ ইনস্টল করুন (App Install)</span>
+                      <span className="text-[10px] text-gray-500 block">প্লে-স্টোর ছাড়াই সরাসরি হোম-স্ক্রিনে ডাউনলোড</span>
+                    </div>
+                  </div>
+                  <span className="text-[10px] bg-amber-100 text-amber-800 font-bold px-2 py-0.5 rounded">
+                    {isInstalled ? 'ইন্সটল করা আছে' : 'ইন্সটল করুন'}
+                  </span>
+                </button>
                 <button 
                   onClick={() => alert('দোকানের রসিদ প্রিন্টার সফলভাবে সংযুক্ত আছে।')}
                   className="w-full p-3.5 flex items-center justify-between hover:bg-gray-50 transition text-left"
@@ -1510,6 +1558,181 @@ export default function App() {
           )}
 
         </main>
+
+        {/* ================= CART DETAILS MODAL (কার্ট বিস্তারিত) ================= */}
+        {isCartModalOpen && (
+          <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4 backdrop-blur-sm animate-fadeIn">
+            <div className="bg-white rounded-3xl w-full max-w-md p-5 space-y-4 shadow-2xl border border-gray-200 max-h-[85vh] flex flex-col">
+              
+              <div className="flex justify-between items-center border-b border-gray-100 pb-3">
+                <div className="flex items-center gap-2">
+                  <span className="p-1.5 rounded-lg bg-[#1B7A5E]/10 text-[#1B7A5E]">
+                    <ShoppingCart className="w-4 h-4" />
+                  </span>
+                  <h3 className="font-bold text-sm text-gray-900">কার্ট এর পণ্য ও বিলের বিবরণ</h3>
+                </div>
+                <button onClick={() => setIsCartModalOpen(false)} className="text-gray-400 hover:text-gray-600">
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+
+              {/* Cart List */}
+              <div className="flex-1 overflow-y-auto space-y-2 pr-1">
+                {cart.length === 0 ? (
+                  <div className="text-center py-8 text-gray-400 text-xs">কার্ট খালি আছে</div>
+                ) : (
+                  cart.map(item => (
+                    <div key={item.product.id} className="bg-gray-50 p-2.5 rounded-xl border border-gray-200 flex items-center justify-between text-xs">
+                      <div className="min-w-0 flex-1 mr-2">
+                        <div className="font-bold text-gray-900 truncate">{item.product.name}</div>
+                        <div className="text-[10px] text-gray-500">
+                          দর: {item.product.sellPrice} × {item.quantity} {item.product.unit} = <span className="font-bold text-[#113F33]">{item.product.sellPrice * item.quantity}</span>
+                        </div>
+                      </div>
+
+                      <div className="flex items-center space-x-1.5 flex-shrink-0">
+                        <button 
+                          onClick={() => updateCartQuantity(item.product.id, -1)}
+                          className="w-6 h-6 rounded-lg bg-white border border-gray-200 text-gray-600 font-bold flex items-center justify-center hover:bg-gray-100"
+                        >
+                          <Minus className="w-3 h-3" />
+                        </button>
+                        <span className="font-bold text-xs text-gray-900 w-5 text-center">{item.quantity}</span>
+                        <button 
+                          onClick={() => updateCartQuantity(item.product.id, 1)}
+                          className="w-6 h-6 rounded-lg bg-[#1B7A5E] text-white font-bold flex items-center justify-center hover:bg-[#113F33]"
+                        >
+                          <Plus className="w-3 h-3" />
+                        </button>
+                        <button 
+                          onClick={() => removeFromCart(item.product.id)}
+                          className="w-6 h-6 rounded-lg text-red-500 hover:bg-red-50 flex items-center justify-center ml-1"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                    </div>
+                  ))
+                )}
+              </div>
+
+              {/* Bill summary & discount */}
+              <div className="bg-emerald-50/70 p-3 rounded-2xl border border-emerald-200 space-y-2 text-xs">
+                <div className="flex justify-between text-gray-700">
+                  <span>মোট সাবটোটাল:</span>
+                  <span className="font-bold">{cartSubtotal.toLocaleString('en-IN')} ৳</span>
+                </div>
+
+                <div className="flex justify-between items-center">
+                  <span className="text-gray-700 font-medium">ছাড়/ডিসকাউন্ট (৳):</span>
+                  <input 
+                    type="number"
+                    value={discountInput || ''}
+                    onChange={(e) => setDiscountInput(Number(e.target.value))}
+                    placeholder="0"
+                    className="w-20 px-2 py-1 bg-white border border-gray-200 rounded-lg text-right font-bold text-xs focus:outline-none focus:border-[#1B7A5E]"
+                  />
+                </div>
+
+                <div className="flex justify-between items-center pt-1 border-t border-emerald-200/80 font-bold text-sm text-[#113F33]">
+                  <span>সর্বমোট বিল:</span>
+                  <span>{cartTotal.toLocaleString('en-IN')} ৳</span>
+                </div>
+
+                {posCustomerType !== 'cash' && (
+                  <div className="flex justify-between items-center pt-1 border-t border-emerald-200/80">
+                    <span className="text-gray-700 font-medium">নগদ গ্রহণ (Paid):</span>
+                    <input 
+                      type="number"
+                      value={cashPaidInput}
+                      onChange={(e) => setCashPaidInput(e.target.value)}
+                      placeholder={String(cartTotal)}
+                      className="w-24 px-2 py-1 bg-white border border-gray-200 rounded-lg text-right font-bold text-xs text-emerald-700 focus:outline-none focus:border-[#1B7A5E]"
+                    />
+                  </div>
+                )}
+              </div>
+
+              {/* Actions */}
+              <div className="flex gap-2 pt-1">
+                <button 
+                  onClick={() => setIsCartModalOpen(false)}
+                  className="px-4 py-2.5 rounded-xl bg-gray-100 text-gray-700 font-bold text-xs hover:bg-gray-200 transition"
+                >
+                  আরও পণ্য যোগ করুন
+                </button>
+                <button 
+                  onClick={() => {
+                    setIsCartModalOpen(false);
+                    handlePreparePrintPreview();
+                  }}
+                  disabled={cart.length === 0}
+                  className="flex-1 py-2.5 rounded-xl bg-[#1B7A5E] text-white font-bold text-xs shadow hover:bg-[#113F33] transition disabled:opacity-50 flex items-center justify-center gap-1"
+                >
+                  <Receipt className="w-4 h-4" /> মেমো ও সাবমিট
+                </button>
+              </div>
+
+            </div>
+          </div>
+        )}
+
+        {/* ================= iOS SAFARI PWA GUIDE MODAL ================= */}
+        {showIOSGuide && (
+          <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4 backdrop-blur-sm animate-fadeIn">
+            <div className="bg-white rounded-3xl w-full max-w-sm p-5 space-y-4 shadow-2xl border border-gray-200 text-center">
+              <div className="w-12 h-12 bg-amber-100 text-amber-700 rounded-full flex items-center justify-center mx-auto">
+                <Smartphone className="w-6 h-6" />
+              </div>
+              <h3 className="font-bold text-sm text-gray-900">আইফোন (iOS Safari)-এ অ্যাপ ইনস্টল করার নিয়ম</h3>
+              
+              <div className="text-left bg-amber-50 p-3.5 rounded-2xl border border-amber-200 text-xs space-y-2 text-amber-900">
+                <div className="flex items-start gap-2">
+                  <span className="font-bold bg-amber-200 w-5 h-5 rounded-full flex items-center justify-center text-[10px] flex-shrink-0">১</span>
+                  <span>সাফারি (Safari) ব্রাউজারের নিচে <b>Share Icon</b> (শেয়ার বোতাম) এ ট্যাপ করুন।</span>
+                </div>
+                <div className="flex items-start gap-2">
+                  <span className="font-bold bg-amber-200 w-5 h-5 rounded-full flex items-center justify-center text-[10px] flex-shrink-0">২</span>
+                  <span>একটু নিচে স্ক্রল করে <b>'Add to Home Screen'</b> নির্বাচন করুন।</span>
+                </div>
+                <div className="flex items-start gap-2">
+                  <span className="font-bold bg-amber-200 w-5 h-5 rounded-full flex items-center justify-center text-[10px] flex-shrink-0">৩</span>
+                  <span>উপরে <b>'Add'</b> ক্লিক করলেই হোম-স্ক্রিনে অ্যাপ আইকন তৈরি হয়ে যাবে।</span>
+                </div>
+              </div>
+
+              <button 
+                onClick={() => setShowIOSGuide(false)}
+                className="w-full py-2.5 rounded-xl bg-[#1B7A5E] text-white font-bold text-xs shadow hover:bg-[#113F33]"
+              >
+                বুঝতে পেরেছি
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* ================= GENERAL PWA INSTRUCTION MODAL ================= */}
+        {showPWAInstructionModal && (
+          <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4 backdrop-blur-sm animate-fadeIn">
+            <div className="bg-white rounded-3xl w-full max-w-sm p-5 space-y-4 shadow-2xl border border-gray-200 text-center">
+              <div className="w-12 h-12 bg-emerald-100 text-[#1B7A5E] rounded-full flex items-center justify-center mx-auto">
+                <Download className="w-6 h-6" />
+              </div>
+              <h3 className="font-bold text-sm text-gray-900">মোবাইলে অ্যাপ হিসেবে সেভ করুন</h3>
+              
+              <p className="text-xs text-gray-600">
+                আপনার ক্রোম (Chrome) বা মোবাইল ব্রাউজারের থ্রি-ডট (<b>⋮</b>) মেনুতে ক্লিক করে <b>'Install App'</b> বা <b>'Add to Home screen'</b> সিলেক্ট করুন।
+              </p>
+
+              <button 
+                onClick={() => setShowPWAInstructionModal(false)}
+                className="w-full py-2.5 rounded-xl bg-[#1B7A5E] text-white font-bold text-xs shadow hover:bg-[#113F33]"
+              >
+                ঠিক আছে
+              </button>
+            </div>
+          </div>
+        )}
 
         {/* ================= DEPOSIT PAYMENT MODAL (টাকা জমা নিন) ================= */}
         {depositModalCustomer && (
@@ -1613,7 +1836,7 @@ export default function App() {
               <div className="bg-[#FFFDF9] border border-dashed border-gray-300 p-4 rounded-xl text-xs font-mono space-y-3 shadow-inner">
                 <div className="text-center space-y-0.5">
                   <h4 className="font-bold text-sm text-[#113F33] font-['Hind_Siliguri']">{STORE_NAME}</h4>
-                  <p className="text-[10px] text-gray-600 font-['Hind_Siliguri']">মুদিখানা ও ডিপার্টমেন্টাল স্টোর</p>
+                  <p className="text-[10px] text-gray-600 font-[#Hind_Siliguri]">মুদিখানা ও ডিপার্টমেন্টাল স্টোর</p>
                   <p className="text-[10px] text-gray-500 font-['Hind_Siliguri']">{STORE_ADDRESS} • {STORE_PHONE}</p>
                 </div>
 
@@ -1650,7 +1873,7 @@ export default function App() {
                   </div>
                   {printPreviewOrder.discount > 0 && (
                     <div className="flex justify-between text-emerald-700">
-                      <span>ডিসকাউন্ট:</span>
+                      <span>ডিসকাウント:</span>
                       <span>- {printPreviewOrder.discount}</span>
                     </div>
                   )}
@@ -1776,9 +1999,9 @@ function handleRequest(e) {
     var bikriSheet = ss.getSheetByName('bikri') || ss.insertSheet('bikri');
     if (data.bikri && data.bikri.length > 0) {
       bikriSheet.clearContents();
-      bikriSheet.appendRow(['invoice no', 'date', 'product name', 'category', 'cost', 'sales', 'discount', 'baki', 'payment method', 'profit']);
+      bikriSheet.appendRow(['invoice no', 'date', 'customer name', 'customer mobile', 'location', 'product name', 'category', 'cost', 'sales', 'discount', 'baki', 'payment method', 'profit']);
       data.bikri.forEach(function(r) {
-        bikriSheet.appendRow([r['invoice no']||'', r['date']||'', r['product name']||'', r['category']||'', r['cost']||0, r['sales']||0, r['discount']||0, r['baki']||0, r['payment method']||'', r['profit']||0]);
+        bikriSheet.appendRow([r['invoice no']||'', r['date']||'', r['customer name']||'', r['customer mobile']||'', r['location']||'', r['product name']||'', r['category']||'', r['cost']||0, r['sales']||0, r['discount']||0, r['baki']||0, r['payment method']||'', r['profit']||0]);
       });
     }
 
@@ -1822,7 +2045,7 @@ function handleRequest(e) {
               <div className="flex gap-2 pt-1">
                 <button 
                   onClick={() => {
-                    navigator.clipboard.writeText(`function doPost(e) { return handleRequest(e); }\nfunction doGet(e) { return handleRequest(e); }\n\nfunction handleRequest(e) {\n  try {\n    var ss = SpreadsheetApp.getActiveSpreadsheet();\n    var data = {};\n    if (e && e.postData && e.postData.contents) {\n      try { data = JSON.parse(e.postData.contents); } catch(err) {}\n    }\n    if ((!data || !data.bikri) && e && e.parameter && e.parameter.data) {\n      try { data = JSON.parse(e.parameter.data); } catch(err) {}\n    }\n\n    var bikriSheet = ss.getSheetByName('bikri') || ss.insertSheet('bikri');\n    if (data.bikri && data.bikri.length > 0) {\n      bikriSheet.clearContents();\n      bikriSheet.appendRow(['invoice no', 'date', 'product name', 'category', 'cost', 'sales', 'discount', 'baki', 'payment method', 'profit']);\n      data.bikri.forEach(function(r) {\n        bikriSheet.appendRow([r['invoice no']||'', r['date']||'', r['product name']||'', r['category']||'', r['cost']||0, r['sales']||0, r['discount']||0, r['baki']||0, r['payment method']||'', r['profit']||0]);\n      });\n    }\n\n    var stockSheet = ss.getSheetByName('stock') || ss.insertSheet('stock');\n    if (data.stock && data.stock.length > 0) {\n      stockSheet.clearContents();\n      stockSheet.appendRow(['id', 'name', 'category', 'stock', 'unit', 'buyPrice', 'sellPrice', 'barcode', 'repName', 'repPhone']);\n      data.stock.forEach(function(p) {\n        stockSheet.appendRow([p.id, p.name, p.category, p.stock, p.unit, p.buyPrice, p.sellPrice, p.barcode, p.repName, p.repPhone]);\n      });\n    }\n\n    var bakiSheet = ss.getSheetByName('bakir khata') || ss.insertSheet('bakir khata');\n    if (data['bakir khata'] && data['bakir khata'].length > 0) {\n      bakiSheet.clearContents();\n      bakiSheet.appendRow(['id', 'name', 'phone', 'address', 'dueAmount', 'lastPurchaseDate', 'status']);\n      data['bakir khata'].forEach(function(c) {\n        bakiSheet.appendRow([c.id, c.name, c.phone, c.address, c.dueAmount, c.lastPurchaseDate, c.status]);\n      });\n    }\n\n    var catSheet = ss.getSheetByName('catgeory') || ss.insertSheet('catgeory');\n    if (data.catgeory && data.catgeory.length > 0) {\n      catSheet.clearContents();\n      catSheet.appendRow(['category_name']);\n      data.catgeory.forEach(function(cat) {\n        catSheet.appendRow([cat]);\n      });\n    }\n\n    return ContentService.createTextOutput(JSON.stringify({ success: true })).setMimeType(ContentService.MimeType.JSON);\n  } catch (err) {\n    return ContentService.createTextOutput(JSON.stringify({ success: false, error: err.toString() })).setMimeType(ContentService.MimeType.JSON);\n  }\n}`);
+                    navigator.clipboard.writeText(`function doPost(e) { return handleRequest(e); }\nfunction doGet(e) { return handleRequest(e); }\n\nfunction handleRequest(e) {\n  try {\n    var ss = SpreadsheetApp.getActiveSpreadsheet();\n    var data = {};\n    if (e && e.postData && e.postData.contents) {\n      try { data = JSON.parse(e.postData.contents); } catch(err) {}\n    }\n    if ((!data || !data.bikri) && e && e.parameter && e.parameter.data) {\n      try { data = JSON.parse(e.parameter.data); } catch(err) {}\n    }\n\n    var bikriSheet = ss.getSheetByName('bikri') || ss.insertSheet('bikri');\n    if (data.bikri && data.bikri.length > 0) {\n      bikriSheet.clearContents();\n      bikriSheet.appendRow(['invoice no', 'date', 'customer name', 'customer mobile', 'location', 'product name', 'category', 'cost', 'sales', 'discount', 'baki', 'payment method', 'profit']);\n      data.bikri.forEach(function(r) {\n        bikriSheet.appendRow([r['invoice no']||'', r['date']||'', r['customer name']||'', r['customer mobile']||'', r['location']||'', r['product name']||'', r['category']||'', r['cost']||0, r['sales']||0, r['discount']||0, r['baki']||0, r['payment method']||'', r['profit']||0]);\n      });\n    }\n\n    var stockSheet = ss.getSheetByName('stock') || ss.insertSheet('stock');\n    if (data.stock && data.stock.length > 0) {\n      stockSheet.clearContents();\n      stockSheet.appendRow(['id', 'name', 'category', 'stock', 'unit', 'buyPrice', 'sellPrice', 'barcode', 'repName', 'repPhone']);\n      data.stock.forEach(function(p) {\n        stockSheet.appendRow([p.id, p.name, p.category, p.stock, p.unit, p.buyPrice, p.sellPrice, p.barcode, p.repName, p.repPhone]);\n      });\n    }\n\n    var bakiSheet = ss.getSheetByName('bakir khata') || ss.insertSheet('bakir khata');\n    if (data['bakir khata'] && data['bakir khata'].length > 0) {\n      bakiSheet.clearContents();\n      bakiSheet.appendRow(['id', 'name', 'phone', 'address', 'dueAmount', 'lastPurchaseDate', 'status']);\n      data['bakir khata'].forEach(function(c) {\n        bakiSheet.appendRow([c.id, c.name, c.phone, c.address, c.dueAmount, c.lastPurchaseDate, c.status]);\n      });\n    }\n\n    var catSheet = ss.getSheetByName('catgeory') || ss.insertSheet('catgeory');\n    if (data.catgeory && data.catgeory.length > 0) {\n      catSheet.clearContents();\n      catSheet.appendRow(['category_name']);\n      data.catgeory.forEach(function(cat) {\n        catSheet.appendRow([cat]);\n      });\n    }\n\n    return ContentService.createTextOutput(JSON.stringify({ success: true })).setMimeType(ContentService.MimeType.JSON);\n  } catch (err) {\n    return ContentService.createTextOutput(JSON.stringify({ success: false, error: err.toString() })).setMimeType(ContentService.MimeType.JSON);\n  }\n}`);
                     alert('কোড কপি করা হয়েছে!');
                   }}
                   className="flex-1 py-2 rounded-xl bg-[#1B7A5E] text-white font-bold text-xs shadow hover:bg-[#113F33] transition"
@@ -1831,7 +2054,7 @@ function handleRequest(e) {
                 </button>
                 <button 
                   onClick={() => setIsScriptModalOpen(false)}
-                  className="px-4 py-2 rounded-xl bg-gray-100 text-gray-700 font-bold text-xs hover:bg-gray-200 transition"
+                  className="px-4 py-2 rounded-xl bg-gray-100 text-gray-700 font-bold text-[#113F33] text-xs hover:bg-gray-200 transition font-bold"
                 >
                   বন্ধ করুন
                 </button>
@@ -1840,8 +2063,8 @@ function handleRequest(e) {
           </div>
         )}
 
-        {/* Consistent Bottom Navigation Bar */}
-        <nav className="absolute bottom-0 left-0 right-0 bg-[#113F33] text-emerald-100 border-t border-[#1B7A5E] py-2 px-2 flex justify-around items-center z-40 shadow-lg">
+        {/* Consistent Sticky Bottom Navigation Bar */}
+        <nav className="sticky bottom-0 left-0 right-0 bg-[#113F33] text-emerald-100 border-t border-[#1B7A5E] py-2 px-2 flex justify-around items-center z-50 shadow-lg">
           
           <button 
             onClick={() => setCurrentTab('home')}

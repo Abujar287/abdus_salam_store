@@ -137,6 +137,16 @@ interface DateHistoryRecord {
   totalRepPayment: number;
 }
 
+interface PaymentRecord {
+  id: string;
+  customerName: string;
+  customerPhone: string;
+  amount: number;
+  method: 'cash' | 'bkash';
+  date: string;
+  timestamp: string;
+}
+
 export default function App() {
   const formatDate = (date: Date) => {
     try {
@@ -157,39 +167,57 @@ export default function App() {
       if (dateVal instanceof Date) {
         d = dateVal;
       } else if (typeof dateVal === 'string') {
-        if (dateVal.includes('T')) {
-          d = new Date(dateVal);
-        } else if (dateVal.includes('-')) {
-          const parts = dateVal.split('-');
+        const cleaned = dateVal.trim();
+        if (cleaned.includes('T')) {
+          d = new Date(cleaned);
+        } else if (cleaned.includes('-') || cleaned.includes('/')) {
+          const sep = cleaned.includes('-') ? '-' : '/';
+          const parts = cleaned.split(sep);
           if (parts.length === 3) {
-            // Check if it's YYYY-MM-DD or DD-MMM-YY
             if (parts[0].length === 4) {
-              d = new Date(dateVal);
+              d = new Date(cleaned);
             } else {
               const day = parseInt(parts[0]);
-              const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-              const month = monthNames.indexOf(parts[1]);
+              const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec', 'January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+              let month = monthNames.findIndex(m => parts[1].toLowerCase().startsWith(m.toLowerCase().slice(0,3)));
+              if (month > 11) month -= 12; // Handle full names
+              
+              if (month === -1 && !isNaN(parseInt(parts[1]))) {
+                month = parseInt(parts[1]) - 1;
+              }
+
               let year = parseInt(parts[2]);
               if (year < 100) year += 2000;
               if (month !== -1) {
                 d = new Date(year, month, day);
               } else {
-                d = new Date(dateVal);
+                d = new Date(cleaned);
               }
             }
           } else {
-            d = new Date(dateVal);
+            d = new Date(cleaned);
           }
         } else {
-          d = new Date(dateVal);
+          d = new Date(cleaned);
         }
       } else {
         d = new Date(dateVal);
       }
 
-      if (isNaN(d.getTime())) return String(dateVal);
+      if (isNaN(d.getTime())) {
+        // Try fallback for DD/MM/YYYY
+        const parts = String(dateVal).split(/[-/]/);
+        if (parts.length === 3) {
+           const d1 = parseInt(parts[0]);
+           const m1 = parseInt(parts[1]) - 1;
+           let y1 = parseInt(parts[2]);
+           if (y1 < 100) y1 += 2000;
+           const testDate = new Date(y1, m1, d1);
+           if (!isNaN(testDate.getTime())) return `${y1}-${String(m1+1).padStart(2,'0')}-${String(d1).padStart(2,'0')}`;
+        }
+        return String(dateVal);
+      }
       
-      // Use local date parts to avoid UTC shift issues
       const y = d.getFullYear();
       const m = String(d.getMonth() + 1).padStart(2, '0');
       const day = String(d.getDate()).padStart(2, '0');
@@ -269,6 +297,11 @@ export default function App() {
 
   const [activities, setActivities] = useState<Activity[]>(() => {
     const saved = localStorage.getItem('abdus_store_activities');
+    return saved ? JSON.parse(saved) : [];
+  });
+
+  const [payments, setPayments] = useState<PaymentRecord[]>(() => {
+    const saved = localStorage.getItem('abdus_store_payments');
     return saved ? JSON.parse(saved) : [];
   });
 
@@ -411,6 +444,10 @@ export default function App() {
   }, [unitsList]);
 
   useEffect(() => {
+    localStorage.setItem('abdus_store_payments', JSON.stringify(payments));
+  }, [payments]);
+
+  useEffect(() => {
     // Activities are now saved directly in logActivity to ensure persistence
   }, [activities]);
 
@@ -450,6 +487,14 @@ export default function App() {
             lastPurchaseDate: c.lastPurchaseDate || '01-Jan-26'
           })) as Customer[];
           setCustomers(uniqueById(fetchedCustomers));
+        }
+
+        if (result.joma && result.joma.length > 0) {
+          const fetchedPayments = result.joma.map((p: any) => ({
+            ...p,
+            amount: Number(p.amount) || 0
+          })) as PaymentRecord[];
+          setPayments(uniqueById(fetchedPayments));
         }
 
         if (result.category && result.category.length > 0) {
@@ -522,7 +567,8 @@ export default function App() {
     targetProducts = products, 
     targetCustomers = customers,
     targetCategories = categoriesList,
-    targetUnits = unitsList
+    targetUnits = unitsList,
+    targetPayments = payments
   ) => {
     if (isSyncing) return;
     setIsSyncing(true);
@@ -561,12 +607,13 @@ export default function App() {
 
       const payload = {
         action: 'syncData',
-        tabs: ['bikri', 'stock', 'bakir khata', 'category', 'units'],
+        tabs: ['bikri', 'stock', 'bakir khata', 'category', 'units', 'joma'],
         bikri: formattedBikri,
         stock: targetProducts.map(p => ({ ...p, datetime: formatDateTime(new Date()) })),
         'bakir khata': targetCustomers.map(c => ({ ...c, datetime: formatDateTime(new Date()) })),
         category: targetCategories.map(cat => ({ category_name: cat, datetime: formatDateTime(new Date()) })),
         units: targetUnits.map(u => ({ unit_name: u, datetime: formatDateTime(new Date()) })),
+        joma: targetPayments.map(p => ({ ...p, datetime: formatDateTime(new Date()) })),
         timestamp: new Date().toISOString()
       };
 
@@ -898,13 +945,13 @@ export default function App() {
   };
 
   return (
-    <div className="h-[100dvh] w-full overflow-hidden bg-[#F3F4F6] text-gray-900 font-['Hind_Siliguri',sans-serif] flex flex-col">
+    <div className="fixed inset-0 w-full h-full overflow-hidden bg-[#F3F4F6] text-gray-900 font-['Hind_Siliguri',sans-serif]">
       
       {/* Main Container wrapper: flex-col h-full overflow-hidden */}
       <div className="w-full h-full flex flex-col overflow-hidden bg-[#F8FAFC] relative">
         
         {/* App Header (Fixed Top) */}
-        <header className="flex-none sticky top-0 z-40 bg-[#113F33] text-white px-3 py-2 flex items-center justify-between shadow-md">
+        <header className="flex-none sticky top-0 z-50 bg-[#113F33] text-white px-3 py-2 flex items-center justify-between shadow-md">
           <div className="flex items-center space-x-2 min-w-0">
             <div className="w-8 h-8 rounded-lg bg-white p-0.5 shadow-sm overflow-hidden flex-shrink-0 flex items-center justify-center border border-emerald-500/30">
               <img 
@@ -941,7 +988,7 @@ export default function App() {
         </header>
 
         {/* Dynamic Content Area */}
-        <main className={`flex-1 overflow-y-auto relative scroll-smooth ${currentTab === 'pos' || currentTab === 'stock' ? 'p-0' : 'p-2'} pb-24`}>
+        <main className={`flex-1 overflow-y-auto relative scroll-smooth overscroll-behavior-y-contain ${currentTab === 'pos' || currentTab === 'stock' ? 'p-0' : 'p-2'} pb-24`}>
           
           {/* ================= 1. HOME / DASHBOARD SCREEN ================= */}
           {currentTab === 'home' && (
@@ -2133,23 +2180,37 @@ export default function App() {
                       return;
                     }
                     
+                    // Logic update: Taking deposit sets due to 0 as requested
                     const updatedCustomers: Customer[] = customers.map(c => {
                       if (c.id === depositModalCustomer.id) {
-                        const newDue = Math.max(0, c.dueAmount - amt);
-                        const newStatus: 'clear' | 'pending' = newDue === 0 ? 'clear' : 'pending';
-                        return { ...c, dueAmount: newDue, status: newStatus };
+                        return { ...c, dueAmount: 0, status: 'clear' };
                       }
                       return c;
                     });
+
+                    const newPayment: PaymentRecord = {
+                      id: `pay-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`,
+                      customerName: depositModalCustomer.name,
+                      customerPhone: depositModalCustomer.phone,
+                      amount: amt,
+                      method: depositMethod,
+                      date: formatDate(new Date()),
+                      timestamp: new Date().toISOString()
+                    };
+
+                    const updatedPayments = [newPayment, ...payments];
                     
                     setCustomers(updatedCustomers);
-                    logActivity('payment', `টাকা জমা: ${depositModalCustomer.name}`, `${amt} ৳ (${depositMethod === 'cash' ? 'নগদ' : 'বিকাশ'}) জমা দেওয়া হয়েছে।`, amt);
-                    alert(`সফলভাবে ${depositModalCustomer.name}-এর কাছ থেকে ${amt} (${depositMethod === 'cash' ? 'নগদ' : 'বিকাশ'}) জমা নেওয়া হয়েছে।`);
+                    setPayments(updatedPayments);
+                    
+                    logActivity('payment', `টাকা জমা: ${depositModalCustomer.name}`, `${amt} ৳ (${depositMethod === 'cash' ? 'নগদ' : 'বিকাশ'}) জমা নেওয়া হয়েছে এবং বকেয়া ০ করা হয়েছে।`, amt);
+                    alert(`সফলভাবে ${depositModalCustomer.name}-এর কাছ থেকে ${amt} (${depositMethod === 'cash' ? 'নগদ' : 'বিকাশ'}) জমা নেওয়া হয়েছে। বর্তমান বকেয়া ০ করা হয়েছে।`);
+                    
                     setDepositModalCustomer(null);
                     setDepositAmountInput('');
                     
                     // Immediate Sync
-                    await handleSync(orders, products, updatedCustomers);
+                    await handleSync(orders, products, updatedCustomers, categoriesList, unitsList, updatedPayments);
                   }}
                   className="flex-1 py-2.5 rounded-xl bg-[#1B7A5E] text-white font-bold text-xs shadow hover:bg-[#113F33]"
                 >
@@ -2334,18 +2395,25 @@ export default function App() {
 
               <div className="bg-gray-900 text-emerald-400 p-3 rounded-xl text-[10px] font-mono overflow-y-auto flex-1 select-all space-y-1 border border-gray-700">
                 <pre>{`function doGet(e) {
-  const action = e.parameter.action;
   const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const action = e.parameter.action;
+  
   if (action === 'getData') {
-    return ContentService.createTextOutput(JSON.stringify({
+    const data = {
       success: true,
       stock: getSheetData(ss, 'stock'),
       bikri: getSheetData(ss, 'bikri'),
       bakir_khata: getSheetData(ss, 'bakir khata'),
       category: getSheetData(ss, 'category'),
-      units: getSheetData(ss, 'units')
-    })).setMimeType(ContentService.MimeType.JSON);
+      units: getSheetData(ss, 'units'),
+      joma: getSheetData(ss, 'joma')
+    };
+    return ContentService.createTextOutput(JSON.stringify(data))
+      .setMimeType(ContentService.MimeType.JSON);
   }
+  
+  return ContentService.createTextOutput(JSON.stringify({ success: true, message: 'Apps Script is Live' }))
+    .setMimeType(ContentService.MimeType.JSON);
 }
 
 function doPost(e) {
@@ -2353,42 +2421,37 @@ function doPost(e) {
   try {
     lock.waitLock(30000);
     const ss = SpreadsheetApp.getActiveSpreadsheet();
-    const data = JSON.parse(e.postData.contents);
+    const contents = JSON.parse(e.postData.contents);
     
-    if (data.action === 'syncData') {
-      if (data.bikri) {
-        const sheet = ss.getSheetByName('bikri') || ss.insertSheet('bikri');
+    if (contents.action === 'syncData') {
+      if (contents.bikri) {
+        const sheet = getOrCreateSheet(ss, 'bikri');
         const headers = ['invoice no', 'date', 'customer name', 'customer mobile', 'location', 'product name', 'category', 'cost', 'sales', 'discount', 'baki', 'payment method', 'profit', 'datetime'];
         
-        // Handle incremental append for bikri
-        const existingData = sheet.getLastRow() > 0 ? sheet.getDataRange().getValues() : [];
-        if (existingData.length === 0) {
+        if (sheet.getLastRow() === 0) {
           sheet.appendRow(headers);
         }
         
-        const existingInvoices = {};
-        for (let i = 1; i < existingData.length; i++) {
-          existingInvoices[String(existingData[i][0]).trim()] = true;
-        }
+        const existingData = sheet.getDataRange().getValues();
+        const existingInvoices = new Set(existingData.slice(1).map(row => String(row[0]).trim()));
         
-        data.bikri.forEach(row => {
+        contents.bikri.forEach(row => {
           const inv = String(row['invoice no']).trim();
-          if (inv && !existingInvoices[inv]) {
-            const values = headers.map(h => {
-              const val = row[h];
-              if (h === 'date') return "'" + val; // Keep as string
-              return val;
+          if (inv && !existingInvoices.has(inv)) {
+            const rowValues = headers.map(h => {
+              if (h === 'date') return "'" + row[h];
+              return row[h];
             });
-            sheet.appendRow(values);
-            existingInvoices[inv] = true;
+            sheet.appendRow(rowValues);
           }
         });
       }
       
-      if (data.stock) updateFullSheet(ss, 'stock', data.stock);
-      if (data['bakir khata']) updateFullSheet(ss, 'bakir khata', data['bakir khata']);
-      if (data.category) updateFullSheet(ss, 'category', data.category);
-      if (data.units) updateFullSheet(ss, 'units', data.units);
+      if (contents.stock) updateFullSheet(ss, 'stock', contents.stock);
+      if (contents['bakir khata']) updateFullSheet(ss, 'bakir khata', contents['bakir khata']);
+      if (contents.category) updateFullSheet(ss, 'category', contents.category);
+      if (contents.units) updateFullSheet(ss, 'units', contents.units);
+      if (contents.joma) updateFullSheet(ss, 'joma', contents.joma);
       
       return ContentService.createTextOutput(JSON.stringify({ success: true }))
         .setMimeType(ContentService.MimeType.JSON);
@@ -2401,10 +2464,18 @@ function doPost(e) {
   }
 }
 
+function getOrCreateSheet(ss, name) {
+  let sheet = ss.getSheetByName(name);
+  if (!sheet) {
+    sheet = ss.insertSheet(name);
+  }
+  return sheet;
+}
+
 function getSheetData(ss, name) {
-  const sheet = ss.getSheetByName(name) || ss.insertSheet(name);
+  const sheet = ss.getSheetByName(name);
+  if (!sheet || sheet.getLastRow() < 2) return [];
   const data = sheet.getDataRange().getValues();
-  if (data.length < 2) return [];
   const headers = data[0];
   return data.slice(1).map(row => {
     const obj = {};
@@ -2418,13 +2489,15 @@ function getSheetData(ss, name) {
 }
 
 function updateFullSheet(ss, name, data) {
-  const sheet = ss.getSheetByName(name) || ss.insertSheet(name);
+  const sheet = getOrCreateSheet(ss, name);
   sheet.clear();
   if (!data || data.length === 0) return;
   const headers = Object.keys(data[0]);
   sheet.appendRow(headers);
   const values = data.map(row => headers.map(h => row[h]));
-  sheet.getRange(2, 1, values.length, headers.length).setValues(values);
+  if (values.length > 0) {
+    sheet.getRange(2, 1, values.length, headers.length).setValues(values);
+  }
 }`}</pre>
               </div>
 
@@ -2452,7 +2525,7 @@ function updateFullSheet(ss, name, data) {
         )}
 
         {/* Always Visible Fixed Bottom Navigation Footer */}
-        <nav className="fixed bottom-0 left-0 right-0 h-16 bg-[#113F33] text-emerald-100 border-t border-[#1B7A5E] px-2 flex justify-around items-center z-40 shadow-[0_-4px_10px_rgba(0,0,0,0.1)]">
+        <nav className="fixed bottom-0 left-0 right-0 h-16 bg-[#113F33] text-emerald-100 border-t border-[#1B7A5E] px-2 flex justify-around items-center z-50 shadow-[0_-4px_10px_rgba(0,0,0,0.3)] safe-area-bottom">
           
           <button 
             onClick={() => setCurrentTab('home')}

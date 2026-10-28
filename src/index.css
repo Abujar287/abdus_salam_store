@@ -1,5 +1,16 @@
 @import "tailwindcss";
 
+html, body, #root {
+  height: 100%;
+  width: 100%;
+  margin: 0;
+  padding: 0;
+  overflow: hidden;
+  position: fixed;
+  inset: 0;
+  -webkit-overflow-scrolling: touch;
+}
+
 /* Remove up/down spinner arrows from number inputs */
 input[type=number]::-webkit-inner-spin-button,
 input[type=number]::-webkit-outer-spin-button {

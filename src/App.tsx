@@ -129,21 +129,20 @@ export default function App() {
   }, []);
 
   // States with LocalStorage Persistence
-  const [products, setProducts] = useState<Product[]>([]);
+  const [products, setProducts] = useState<Product[]>(() => {
+    const saved = localStorage.getItem('abdus_store_products');
+    return saved ? JSON.parse(saved) : [];
+  });
 
-  // Exit Confirmation
-  useEffect(() => {
-    const handleBeforeUnload = (e: BeforeUnloadEvent) => {
-      e.preventDefault();
-      e.returnValue = '';
-    };
-    window.addEventListener('beforeunload', handleBeforeUnload);
-    return () => window.removeEventListener('beforeunload', handleBeforeUnload);
-  }, []);
+  const [customers, setCustomers] = useState<Customer[]>(() => {
+    const saved = localStorage.getItem('abdus_store_customers');
+    return saved ? JSON.parse(saved) : [];
+  });
 
-  const [customers, setCustomers] = useState<Customer[]>([]);
-
-  const [orders, setOrders] = useState<Order[]>([]);
+  const [orders, setOrders] = useState<Order[]>(() => {
+    const saved = localStorage.getItem('abdus_store_orders');
+    return saved ? JSON.parse(saved) : [];
+  });
   const [newCustomersCountToday, setNewCustomersCountToday] = useState<number>(3);
   
   // POS Cart State
@@ -192,10 +191,10 @@ export default function App() {
   const [isAddProductOpen, setIsAddProductOpen] = useState<boolean>(false);
   const [newProductName, setNewProductName] = useState('');
   const [newProductCategory, setNewProductCategory] = useState('মুদি');
-  const [newProductStock, setNewProductStock] = useState(10);
-  const [newProductUnit, setNewProductUnit] = useState('কেজি');
-  const [newProductBuy, setNewProductBuy] = useState(100);
-  const [newProductSell, setNewProductSell] = useState(120);
+  const [newProductStock, setNewProductStock] = useState<string>('');
+  const [newProductUnit, setNewProductUnit] = useState<string>('কেজি');
+  const [newProductBuy, setNewProductBuy] = useState<string>('');
+  const [newProductSell, setNewProductSell] = useState<string>('');
   const [newProductRepName, setNewProductRepName] = useState('');
   const [newProductRepPhone, setNewProductRepPhone] = useState('');
 
@@ -1021,7 +1020,8 @@ export default function App() {
                           <input 
                             type="number" 
                             value={newProductStock}
-                            onChange={(e) => setNewProductStock(Number(e.target.value))}
+                            onChange={(e) => setNewProductStock(e.target.value)}
+                            placeholder="0"
                             className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-xl font-medium text-center"
                           />
                         </div>
@@ -1030,7 +1030,8 @@ export default function App() {
                           <input 
                             type="number" 
                             value={newProductBuy}
-                            onChange={(e) => setNewProductBuy(Number(e.target.value))}
+                            onChange={(e) => setNewProductBuy(e.target.value)}
+                            placeholder="0"
                             className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-xl font-medium text-center"
                           />
                         </div>
@@ -1039,7 +1040,8 @@ export default function App() {
                           <input 
                             type="number" 
                             value={newProductSell}
-                            onChange={(e) => setNewProductSell(Number(e.target.value))}
+                            onChange={(e) => setNewProductSell(e.target.value)}
+                            placeholder="0"
                             className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-xl font-medium text-center"
                           />
                         </div>
@@ -1085,10 +1087,10 @@ export default function App() {
                             id: `p-${Date.now()}`,
                             name: newProductName,
                             category: newProductCategory,
-                            stock: newProductStock,
+                            stock: Number(newProductStock) || 0,
                             unit: newProductUnit,
-                            buyPrice: newProductBuy,
-                            sellPrice: newProductSell,
+                            buyPrice: Number(newProductBuy) || 0,
+                            sellPrice: Number(newProductSell) || 0,
                             barcode: `${Math.floor(2000 + Math.random() * 9000)}`,
                             repName: newProductRepName.trim() || 'নির্ধারিত নয়',
                             repPhone: newProductRepPhone.trim() || '01700000000',
@@ -1097,7 +1099,11 @@ export default function App() {
                           setProducts([newProd, ...products]);
                           setIsAddProductOpen(false);
                           setNewProductName('');
+                          setNewProductStock('');
+                          setNewProductBuy('');
+                          setNewProductSell('');
                           setNewProductRepName('');
+                          setNewProductRepPhone('');
                           setNewProductRepPhone('');
                         }}
                         className="flex-1 py-2 rounded-xl bg-[#1B7A5E] text-white font-bold text-xs shadow hover:bg-[#113F33]"

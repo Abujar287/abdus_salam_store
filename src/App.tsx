@@ -250,10 +250,21 @@ export default function App() {
     return () => window.removeEventListener('resize', handleResize);
   }, []);
 
-  // States
-  const [products, setProducts] = useState<Product[]>(INITIAL_PRODUCTS);
-  const [customers, setCustomers] = useState<Customer[]>(INITIAL_CUSTOMERS);
-  const [orders, setOrders] = useState<Order[]>(INITIAL_ORDERS);
+  // States with LocalStorage Persistence
+  const [products, setProducts] = useState<Product[]>(() => {
+    const saved = localStorage.getItem('abdus_store_products');
+    return saved ? JSON.parse(saved) : INITIAL_PRODUCTS;
+  });
+
+  const [customers, setCustomers] = useState<Customer[]>(() => {
+    const saved = localStorage.getItem('abdus_store_customers');
+    return saved ? JSON.parse(saved) : INITIAL_CUSTOMERS;
+  });
+
+  const [orders, setOrders] = useState<Order[]>(() => {
+    const saved = localStorage.getItem('abdus_store_orders');
+    return saved ? JSON.parse(saved) : INITIAL_ORDERS;
+  });
   const [newCustomersCountToday, setNewCustomersCountToday] = useState<number>(3);
   
   // POS Cart State
@@ -319,7 +330,30 @@ export default function App() {
   const [isSyncing, setIsSyncing] = useState<boolean>(false);
   const [isScriptModalOpen, setIsScriptModalOpen] = useState<boolean>(false);
 
-  const GOOGLE_SHEET_WEB_APP_URL = 'https://script.google.com/macros/s/AKfycbx6qXyoYua4tUchRlaa0mH78EXxgbvmRWmVpWfxv5v4_At4_QGvwS13H8ruZf1J3bGBeA/exec';
+  const [sheetUrl, setSheetUrl] = useState<string>(() => {
+    return localStorage.getItem('google_sheet_url') || 'https://script.google.com/macros/s/AKfycbx6qXyoYua4tUchRlaa0mH78EXxgbvmRWmVpWfxv5v4_At4_QGvwS13H8ruZf1J3bGBeA/exec';
+  });
+
+  // Save to LocalStorage whenever state changes
+  useEffect(() => {
+    localStorage.setItem('abdus_store_products', JSON.stringify(products));
+  }, [products]);
+
+  useEffect(() => {
+    localStorage.setItem('abdus_store_customers', JSON.stringify(customers));
+  }, [customers]);
+
+  useEffect(() => {
+    localStorage.setItem('abdus_store_orders', JSON.stringify(orders));
+  }, [orders]);
+
+  useEffect(() => {
+    localStorage.setItem('abdus_store_categories', JSON.stringify(categoriesList));
+  }, [categoriesList]);
+
+  useEffect(() => {
+    localStorage.setItem('google_sheet_url', sheetUrl);
+  }, [sheetUrl]);
 
   const handleSync = async () => {
     setIsSyncing(true);
@@ -368,7 +402,7 @@ export default function App() {
 
       const form = document.createElement('form');
       form.method = 'POST';
-      form.action = GOOGLE_SHEET_WEB_APP_URL;
+      form.action = sheetUrl;
       form.target = 'gscript_sync_target_iframe';
 
       const input = document.createElement('input');
@@ -384,7 +418,7 @@ export default function App() {
       }, 500);
 
       // Method 2: Fetch POST fallback
-      fetch(GOOGLE_SHEET_WEB_APP_URL, {
+      fetch(sheetUrl, {
         method: 'POST',
         mode: 'no-cors',
         headers: { 'Content-Type': 'text/plain' },
@@ -392,7 +426,7 @@ export default function App() {
       }).catch(() => {});
 
       // Method 3: Fetch GET fallback
-      fetch(`${GOOGLE_SHEET_WEB_APP_URL}?action=syncData&data=${encodeURIComponent(jsonStr)}`, {
+      fetch(`${sheetUrl}?action=syncData&data=${encodeURIComponent(jsonStr)}`, {
         method: 'GET',
         mode: 'no-cors'
       }).catch(() => {});
@@ -412,7 +446,9 @@ export default function App() {
         const ampm = hours >= 12 ? 'PM' : 'AM';
         hours = hours % 12;
         hours = hours ? hours : 12;
-        setSyncTime(`${day}-${month}-${year} ${hours}:${minutes}${ampm}`);
+        const newSyncStr = `${day}-${month}-${year} ${hours}:${minutes}${ampm}`;
+        setSyncTime(newSyncStr);
+        alert(`গুগল শিটে ডাটা সিঙ্ক সম্পন্ন হয়েছে!\n\nট্যাবসমূহ: bikri (কলাম: customer name, customer mobile, location সহ), stock, bakir khata, catgeory`);
       }, 800);
     }
   };
@@ -640,13 +676,13 @@ export default function App() {
   };
 
   return (
-    <div className="min-h-screen bg-[#F3F4F6] text-gray-900 font-['Hind_Siliguri',sans-serif] flex flex-col items-center">
+    <div className="h-screen w-screen overflow-hidden bg-[#F3F4F6] text-gray-900 font-['Hind_Siliguri',sans-serif] flex flex-col items-center">
       
-      {/* Main Container wrapper: automatically adapts to mobile frame when width < 768px, or widescreen desktop when >= 768px */}
-      <div className={`w-full transition-all duration-300 ${isMobileView ? 'max-w-md my-0 md:my-4 shadow-2xl rounded-none md:rounded-3xl overflow-hidden bg-[#F3F4F6] relative min-h-screen md:min-h-[844px] flex flex-col' : 'w-full min-h-screen bg-[#F3F4F6] relative flex flex-col shadow-none rounded-none border-none'}`}>
+      {/* Main Container wrapper: flex-col h-full overflow-hidden */}
+      <div className={`w-full h-full flex flex-col overflow-hidden bg-[#F3F4F6] relative ${isMobileView ? 'max-w-md mx-auto shadow-2xl rounded-none md:rounded-3xl border border-gray-200' : 'w-full'}`}>
         
-        {/* App Header (Sticky Top) */}
-        <div className="sticky top-0 z-30 bg-[#113F33] text-white px-3 py-2.5 shadow-md flex items-center justify-between">
+        {/* App Header (Fixed Top - Always Visible) */}
+        <header className="flex-none z-30 bg-[#113F33] text-white px-3 py-2.5 shadow-md flex items-center justify-between">
           <div className="flex items-center space-x-2.5 min-w-0">
             <div className="w-9 h-9 rounded-xl bg-white p-0.5 shadow-md overflow-hidden flex-shrink-0 flex items-center justify-center border border-[#1B7A5E]">
               <img 
@@ -684,10 +720,10 @@ export default function App() {
               <span className="whitespace-nowrap">Last Sync: {syncTime}</span>
             </button>
           </div>
-        </div>
+        </header>
 
-        {/* Dynamic Content Area */}
-        <main className="flex-1 overflow-y-auto pb-24">
+        {/* Dynamic Content Area (Scrolls independently) */}
+        <main className="flex-1 overflow-y-auto p-3.5 pb-20 relative">
           
           {/* ================= 1. HOME / DASHBOARD SCREEN ================= */}
           {currentTab === 'home' && (
@@ -819,33 +855,33 @@ export default function App() {
                   <span className="text-xs bg-emerald-100 text-emerald-800 px-2 py-0.5 rounded font-bold">অটো</span>
                 </div>
 
-                <div className="p-3 space-y-2.5">
+                <div className="p-3 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
                   {dateHistoryList.map((record, index) => (
-                    <div key={index} className="bg-gradient-to-r from-gray-50 to-white p-3 rounded-xl border border-gray-200 flex flex-col space-y-2 text-xs shadow-sm">
-                      <div className="flex justify-between items-center border-b border-gray-200 pb-1.5">
-                        <span className="font-bold text-gray-900 text-sm flex items-center gap-1">
-                          <Calendar className="w-3.5 h-3.5 text-[#1B7A5E]" /> {record.date}
+                    <div key={index} className="bg-gradient-to-r from-gray-50 to-white p-3.5 rounded-2xl border border-gray-200 flex flex-col space-y-2.5 text-xs shadow-xs hover:shadow-sm transition">
+                      <div className="flex justify-between items-center border-b border-gray-200 pb-2">
+                        <span className="font-bold text-gray-900 text-sm flex items-center gap-1.5">
+                          <Calendar className="w-4 h-4 text-[#1B7A5E]" /> {record.date}
                         </span>
-                        <span className="bg-emerald-100 text-emerald-800 font-bold px-2 py-0.5 rounded text-[11px]">
+                        <span className="bg-emerald-100 text-emerald-800 font-bold px-2.5 py-0.5 rounded text-xs">
                           অর্ডার: {record.totalOrders}
                         </span>
                       </div>
-                      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 pt-1">
-                        <div className="bg-white p-2 rounded-lg border border-gray-100">
+                      <div className="grid grid-cols-2 gap-2 pt-1">
+                        <div className="bg-white p-2 rounded-xl border border-gray-100 shadow-xs">
                           <span className="text-gray-400 block text-[10px]">বিক্রি</span>
-                          <span className="font-bold text-emerald-700 text-sm">{record.totalSales.toLocaleString('en-IN')}</span>
+                          <span className="font-bold text-emerald-700 text-sm">{record.totalSales.toLocaleString('en-IN')} ৳</span>
                         </div>
-                        <div className="bg-white p-2 rounded-lg border border-gray-100">
+                        <div className="bg-white p-2 rounded-xl border border-gray-100 shadow-xs">
                           <span className="text-gray-400 block text-[10px]">গ্রাহক / নতুন</span>
                           <span className="font-bold text-gray-800 text-sm">{record.totalCustomers} / {record.totalNewCustomers}</span>
                         </div>
-                        <div className="bg-white p-2 rounded-lg border border-gray-100">
+                        <div className="bg-white p-2 rounded-xl border border-gray-100 shadow-xs">
                           <span className="text-gray-400 block text-[10px]">লাভ</span>
-                          <span className="font-bold text-teal-700 text-sm">{record.totalProfit.toLocaleString('en-IN')}</span>
+                          <span className="font-bold text-teal-700 text-sm">{record.totalProfit.toLocaleString('en-IN')} ৳</span>
                         </div>
-                        <div className="bg-white p-2 rounded-lg border border-gray-100">
+                        <div className="bg-white p-2 rounded-xl border border-gray-100 shadow-xs">
                           <span className="text-gray-400 block text-[10px]">প্রতিনিধি পরিশোধ</span>
-                          <span className="font-bold text-orange-700 text-sm">{record.totalRepPayment.toLocaleString('en-IN')}</span>
+                          <span className="font-bold text-orange-700 text-sm">{record.totalRepPayment.toLocaleString('en-IN')} ৳</span>
                         </div>
                       </div>
                     </div>
@@ -858,7 +894,7 @@ export default function App() {
 
           {/* ================= 2. POS / SALES SCREEN (নতুন বিক্রি) ================= */}
           {currentTab === 'pos' && (
-            <div className={`p-4 space-y-4 animate-fadeIn ${!isMobileView ? 'max-w-4xl mx-auto' : ''}`}>
+            <div className="p-4 space-y-4 animate-fadeIn w-full">
               
               {/* POS Top Header */}
               <div className="bg-white p-3.5 rounded-2xl shadow-sm border border-gray-200 space-y-3">
@@ -991,8 +1027,8 @@ export default function App() {
                 </div>
               </div>
 
-              {/* Product Grid - Ultra Compact Layout */}
-              <div className={`grid gap-1.5 ${!isMobileView ? 'grid-cols-4 md:grid-cols-5' : 'grid-cols-2'}`}>
+              {/* Product Grid - Ultra Compact Widescreen Layout */}
+              <div className="grid gap-2 grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 2xl:grid-cols-7">
                 {products
                   .filter(p => selectedCategoryFilter === 'সব' || p.category === selectedCategoryFilter)
                   .filter(p => matchesProductSearch(p, posSearchQuery))
@@ -1988,54 +2024,67 @@ function handleRequest(e) {
   try {
     var ss = SpreadsheetApp.getActiveSpreadsheet();
     var data = {};
-    if (e && e.postData && e.postData.contents) {
-      try { data = JSON.parse(e.postData.contents); } catch(err) {}
-    }
-    if ((!data || !data.bikri) && e && e.parameter && e.parameter.data) {
+    if (e && e.parameter && e.parameter.data) {
       try { data = JSON.parse(e.parameter.data); } catch(err) {}
+    }
+    if ((!data || !data.bikri) && e && e.postData && e.postData.contents) {
+      try { data = JSON.parse(e.postData.contents); } catch(err) {}
     }
 
     // 1. Tab: bikri
     var bikriSheet = ss.getSheetByName('bikri') || ss.insertSheet('bikri');
-    if (data.bikri && data.bikri.length > 0) {
-      bikriSheet.clearContents();
+    if (bikriSheet.getLastRow() === 0) {
       bikriSheet.appendRow(['invoice no', 'date', 'customer name', 'customer mobile', 'location', 'product name', 'category', 'cost', 'sales', 'discount', 'baki', 'payment method', 'profit']);
+    }
+    if (data && data.bikri && data.bikri.length > 0) {
+      var existingData = bikriSheet.getDataRange().getValues();
+      var existingKeys = {};
+      for (var x = 1; x < existingData.length; x++) {
+        var key = (existingData[x][0] || '') + '_' + (existingData[x][5] || '');
+        existingKeys[key] = true;
+      }
       data.bikri.forEach(function(r) {
-        bikriSheet.appendRow([r['invoice no']||'', r['date']||'', r['customer name']||'', r['customer mobile']||'', r['location']||'', r['product name']||'', r['category']||'', r['cost']||0, r['sales']||0, r['discount']||0, r['baki']||0, r['payment method']||'', r['profit']||0]);
+        var invNo = r['invoice no'] || r['invoice_no'] || '';
+        var pName = r['product name'] || r['product_name'] || '';
+        var rowKey = invNo + '_' + pName;
+        if (!existingKeys[rowKey]) {
+          bikriSheet.appendRow([invNo, r['date']||'', r['customer name']||r['customer_name']||'নগদ ক্রেতা', r['customer mobile']||r['customer_mobile']||'-', r['location']||r['address']||'রায়পুর বাজার', pName, r['category']||'', r['cost']||0, r['sales']||0, r['discount']||0, r['baki']||0, r['payment method']||'', r['profit']||0]);
+          existingKeys[rowKey] = true;
+        }
       });
     }
 
     // 2. Tab: stock
     var stockSheet = ss.getSheetByName('stock') || ss.insertSheet('stock');
-    if (data.stock && data.stock.length > 0) {
-      stockSheet.clearContents();
-      stockSheet.appendRow(['id', 'name', 'category', 'stock', 'unit', 'buyPrice', 'sellPrice', 'barcode', 'repName', 'repPhone']);
+    stockSheet.clearContents();
+    stockSheet.appendRow(['id', 'name', 'category', 'stock', 'unit', 'buyPrice', 'sellPrice', 'barcode', 'repName', 'repPhone']);
+    if (data && data.stock && data.stock.length > 0) {
       data.stock.forEach(function(p) {
-        stockSheet.appendRow([p.id, p.name, p.category, p.stock, p.unit, p.buyPrice, p.sellPrice, p.barcode, p.repName, p.repPhone]);
+        stockSheet.appendRow([p.id||'', p.name||'', p.category||'', p.stock||0, p.unit||'', p.buyPrice||0, p.sellPrice||0, p.barcode||'', p.repName||'', p.repPhone||'']);
       });
     }
 
     // 3. Tab: bakir khata
     var bakiSheet = ss.getSheetByName('bakir khata') || ss.insertSheet('bakir khata');
-    if (data['bakir khata'] && data['bakir khata'].length > 0) {
-      bakiSheet.clearContents();
-      bakiSheet.appendRow(['id', 'name', 'phone', 'address', 'dueAmount', 'lastPurchaseDate', 'status']);
+    bakiSheet.clearContents();
+    bakiSheet.appendRow(['id', 'name', 'phone', 'address', 'dueAmount', 'lastPurchaseDate', 'status']);
+    if (data && data['bakir khata'] && data['bakir khata'].length > 0) {
       data['bakir khata'].forEach(function(c) {
-        bakiSheet.appendRow([c.id, c.name, c.phone, c.address, c.dueAmount, c.lastPurchaseDate, c.status]);
+        bakiSheet.appendRow([c.id||'', c.name||'', c.phone||'', c.address||'', c.dueAmount||0, c.lastPurchaseDate||'', c.status||'']);
       });
     }
 
     // 4. Tab: catgeory
     var catSheet = ss.getSheetByName('catgeory') || ss.insertSheet('catgeory');
-    if (data.catgeory && data.catgeory.length > 0) {
-      catSheet.clearContents();
-      catSheet.appendRow(['category_name']);
+    catSheet.clearContents();
+    catSheet.appendRow(['category_name']);
+    if (data && data.catgeory && data.catgeory.length > 0) {
       data.catgeory.forEach(function(cat) {
         catSheet.appendRow([cat]);
       });
     }
 
-    return ContentService.createTextOutput(JSON.stringify({ success: true })).setMimeType(ContentService.MimeType.JSON);
+    return ContentService.createTextOutput(JSON.stringify({ success: true, message: 'Synced successfully' })).setMimeType(ContentService.MimeType.JSON);
   } catch (err) {
     return ContentService.createTextOutput(JSON.stringify({ success: false, error: err.toString() })).setMimeType(ContentService.MimeType.JSON);
   }
@@ -2045,7 +2094,7 @@ function handleRequest(e) {
               <div className="flex gap-2 pt-1">
                 <button 
                   onClick={() => {
-                    navigator.clipboard.writeText(`function doPost(e) { return handleRequest(e); }\nfunction doGet(e) { return handleRequest(e); }\n\nfunction handleRequest(e) {\n  try {\n    var ss = SpreadsheetApp.getActiveSpreadsheet();\n    var data = {};\n    if (e && e.postData && e.postData.contents) {\n      try { data = JSON.parse(e.postData.contents); } catch(err) {}\n    }\n    if ((!data || !data.bikri) && e && e.parameter && e.parameter.data) {\n      try { data = JSON.parse(e.parameter.data); } catch(err) {}\n    }\n\n    var bikriSheet = ss.getSheetByName('bikri') || ss.insertSheet('bikri');\n    if (data.bikri && data.bikri.length > 0) {\n      bikriSheet.clearContents();\n      bikriSheet.appendRow(['invoice no', 'date', 'customer name', 'customer mobile', 'location', 'product name', 'category', 'cost', 'sales', 'discount', 'baki', 'payment method', 'profit']);\n      data.bikri.forEach(function(r) {\n        bikriSheet.appendRow([r['invoice no']||'', r['date']||'', r['customer name']||'', r['customer mobile']||'', r['location']||'', r['product name']||'', r['category']||'', r['cost']||0, r['sales']||0, r['discount']||0, r['baki']||0, r['payment method']||'', r['profit']||0]);\n      });\n    }\n\n    var stockSheet = ss.getSheetByName('stock') || ss.insertSheet('stock');\n    if (data.stock && data.stock.length > 0) {\n      stockSheet.clearContents();\n      stockSheet.appendRow(['id', 'name', 'category', 'stock', 'unit', 'buyPrice', 'sellPrice', 'barcode', 'repName', 'repPhone']);\n      data.stock.forEach(function(p) {\n        stockSheet.appendRow([p.id, p.name, p.category, p.stock, p.unit, p.buyPrice, p.sellPrice, p.barcode, p.repName, p.repPhone]);\n      });\n    }\n\n    var bakiSheet = ss.getSheetByName('bakir khata') || ss.insertSheet('bakir khata');\n    if (data['bakir khata'] && data['bakir khata'].length > 0) {\n      bakiSheet.clearContents();\n      bakiSheet.appendRow(['id', 'name', 'phone', 'address', 'dueAmount', 'lastPurchaseDate', 'status']);\n      data['bakir khata'].forEach(function(c) {\n        bakiSheet.appendRow([c.id, c.name, c.phone, c.address, c.dueAmount, c.lastPurchaseDate, c.status]);\n      });\n    }\n\n    var catSheet = ss.getSheetByName('catgeory') || ss.insertSheet('catgeory');\n    if (data.catgeory && data.catgeory.length > 0) {\n      catSheet.clearContents();\n      catSheet.appendRow(['category_name']);\n      data.catgeory.forEach(function(cat) {\n        catSheet.appendRow([cat]);\n      });\n    }\n\n    return ContentService.createTextOutput(JSON.stringify({ success: true })).setMimeType(ContentService.MimeType.JSON);\n  } catch (err) {\n    return ContentService.createTextOutput(JSON.stringify({ success: false, error: err.toString() })).setMimeType(ContentService.MimeType.JSON);\n  }\n}`);
+                    navigator.clipboard.writeText(`function doPost(e) { return handleRequest(e); }\nfunction doGet(e) { return handleRequest(e); }\n\nfunction handleRequest(e) {\n  try {\n    var ss = SpreadsheetApp.getActiveSpreadsheet();\n    var data = {};\n    if (e && e.parameter && e.parameter.data) {\n      try { data = JSON.parse(e.parameter.data); } catch(err) {}\n    }\n    if ((!data || !data.bikri) && e && e.postData && e.postData.contents) {\n      try { data = JSON.parse(e.postData.contents); } catch(err) {}\n    }\n\n    var bikriSheet = ss.getSheetByName('bikri') || ss.insertSheet('bikri');\n    bikriSheet.clearContents();\n    bikriSheet.appendRow(['invoice no', 'date', 'customer name', 'customer mobile', 'location', 'product name', 'category', 'cost', 'sales', 'discount', 'baki', 'payment method', 'profit']);\n    if (data && data.bikri && data.bikri.length > 0) {\n      data.bikri.forEach(function(r) {\n        bikriSheet.appendRow([r['invoice no']||'', r['date']||'', r['customer name']||'', r['customer mobile']||'', r['location']||'', r['product name']||'', r['category']||'', r['cost']||0, r['sales']||0, r['discount']||0, r['baki']||0, r['payment method']||'', r['profit']||0]);\n      });\n    }\n\n    var stockSheet = ss.getSheetByName('stock') || ss.insertSheet('stock');\n    stockSheet.clearContents();\n    stockSheet.appendRow(['id', 'name', 'category', 'stock', 'unit', 'buyPrice', 'sellPrice', 'barcode', 'repName', 'repPhone']);\n    if (data && data.stock && data.stock.length > 0) {\n      data.stock.forEach(function(p) {\n        stockSheet.appendRow([p.id||'', p.name||'', p.category||'', p.stock||0, p.unit||'', p.buyPrice||0, p.sellPrice||0, p.barcode||'', p.repName||'', p.repPhone||'']);\n      });\n    }\n\n    var bakiSheet = ss.getSheetByName('bakir khata') || ss.insertSheet('bakir khata');\n    bakiSheet.clearContents();\n    bakiSheet.appendRow(['id', 'name', 'phone', 'address', 'dueAmount', 'lastPurchaseDate', 'status']);\n    if (data && data['bakir khata'] && data['bakir khata'].length > 0) {\n      data['bakir khata'].forEach(function(c) {\n        bakiSheet.appendRow([c.id||'', c.name||'', c.phone||'', c.address||'', c.dueAmount||0, c.lastPurchaseDate||'', c.status||'']);\n      });\n    }\n\n    var catSheet = ss.getSheetByName('catgeory') || ss.insertSheet('catgeory');\n    catSheet.clearContents();\n    catSheet.appendRow(['category_name']);\n    if (data && data.catgeory && data.catgeory.length > 0) {\n      data.catgeory.forEach(function(cat) {\n        catSheet.appendRow([cat]);\n      });\n    }\n\n    return ContentService.createTextOutput(JSON.stringify({ success: true, message: 'Synced successfully' })).setMimeType(ContentService.MimeType.JSON);\n  } catch (err) {\n    return ContentService.createTextOutput(JSON.stringify({ success: false, error: err.toString() })).setMimeType(ContentService.MimeType.JSON);\n  }\n}`);
                     alert('কোড কপি করা হয়েছে!');
                   }}
                   className="flex-1 py-2 rounded-xl bg-[#1B7A5E] text-white font-bold text-xs shadow hover:bg-[#113F33] transition"
@@ -2063,8 +2112,8 @@ function handleRequest(e) {
           </div>
         )}
 
-        {/* Consistent Sticky Bottom Navigation Bar */}
-        <nav className="sticky bottom-0 left-0 right-0 bg-[#113F33] text-emerald-100 border-t border-[#1B7A5E] py-2 px-2 flex justify-around items-center z-50 shadow-lg">
+        {/* Always Visible Fixed Bottom Navigation Footer */}
+        <nav className="flex-none bg-[#113F33] text-emerald-100 border-t border-[#1B7A5E] py-2.5 px-2 flex justify-around items-center z-30 shadow-lg">
           
           <button 
             onClick={() => setCurrentTab('home')}

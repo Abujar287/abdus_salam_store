@@ -110,7 +110,7 @@ interface DateHistoryRecord {
 
 export default function App() {
   const [currentTab, setCurrentTab] = useState<'home' | 'pos' | 'stock' | 'ledger' | 'activity' | 'more'>('home');
-  const [timeframe, setTimeframe] = useState<'today' | 'week' | 'month'>('today');
+  const [timeframe, setTimeframe] = useState<'today' | 'week' | 'month' | 'more'>('today');
   
   // Auto-detect screen size on initial load and resize
   const [isMobileView, setIsMobileView] = useState<boolean>(() => {
@@ -510,8 +510,8 @@ export default function App() {
 
   const totalOrdersCount = filteredOrders.length;
   const totalSalesAmount = filteredOrders.reduce((sum, o) => sum + o.total, 0);
-  const totalCustomersCount = customers.length + 120;
-  const newCustomersCount = timeframe === 'today' ? newCustomersCountToday : (timeframe === 'week' ? 18 : 35);
+  const totalCustomersCount = customers.length;
+  const newCustomersCount = filteredOrders.filter(o => o.customerName !== 'নগদ ক্রেতা').length;
   
   const totalProfitAmount = filteredOrders.reduce((sum, o) => {
     const orderProfit = o.items.reduce((itemSum, item) => {
@@ -617,21 +617,29 @@ export default function App() {
             <div className="p-2 space-y-3 animate-fadeIn w-full">
               
               {/* Timeframe selector tabs */}
-              <div className="flex bg-white rounded-xl p-0.5 shadow-sm border border-gray-200 text-xs font-bold w-full">
+              <div className="flex bg-white rounded-xl p-0.5 shadow-sm border border-emerald-100 text-xs font-bold w-full bg-emerald-50/30">
                 {[
                   { id: 'today', label: 'আজ' },
                   { id: 'week', label: 'গত সপ্তাহ' },
-                  { id: 'month', label: 'এই মাস' }
+                  { id: 'month', label: 'এই মাস' },
+                  { id: 'more', label: 'আরও ফিল্টার' }
                 ].map((tf) => (
                   <button 
                     key={tf.id}
-                    onClick={() => setTimeframe(tf.id as 'today' | 'week' | 'month')}
-                    className={`flex-1 py-2 rounded-lg transition text-center ${timeframe === tf.id ? 'bg-[#113F33] text-white shadow' : 'text-gray-600 hover:bg-gray-100'}`}
+                    onClick={() => setTimeframe(tf.id as 'today' | 'week' | 'month' | 'more')}
+                    className={`flex-1 py-2 rounded-lg transition text-center ${timeframe === tf.id ? 'bg-[#113F33] text-white shadow' : 'text-gray-600 hover:bg-emerald-100'}`}
                   >
                     {tf.label}
                   </button>
                 ))}
               </div>
+
+              {timeframe === 'more' && (
+                <div className="bg-white p-2 rounded-lg shadow-sm border border-emerald-100 flex gap-1 text-[10px]">
+                  <input type="date" className="flex-1 p-1 border border-emerald-100 rounded" />
+                  <input type="date" className="flex-1 p-1 border border-emerald-100 rounded" />
+                </div>
+              )}
 
               {/* Compact Summary Cards - Grid */}
               <div className="grid grid-cols-3 gap-1.5 w-full">
@@ -652,14 +660,14 @@ export default function App() {
 
               {/* Compact History Table */}
               <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden w-full text-[10px]">
-                <div className="p-2 bg-gray-50 border-b border-gray-200 font-bold text-gray-800 grid grid-cols-9 gap-1 text-center">
+                <div className="p-2 bg-emerald-50/50 border border-emerald-100 rounded-t-lg font-bold text-gray-800 grid grid-cols-9 gap-1 text-center">
                   <div className="col-span-1">তারিখ</div>
                   <div className="col-span-1">অর্ডার</div>
-                  <div className="col-span-1">পুরাতন</div>
-                  <div className="col-span-1">নতুন</div>
-                  <div className="col-span-1">মোট</div>
+                  <div className="col-span-1">পুরাতন<br/>ক্রেতা</div>
+                  <div className="col-span-1">নতুন<br/>ক্রেতা</div>
+                  <div className="col-span-1">মোট<br/>ক্রেতা</div>
                   <div className="col-span-1">বিক্রি</div>
-                  <div className="col-span-1">গ্রাহক<br/>প্রতি</div>
+                  <div className="col-span-1">ক্রেতা<br/>প্রতি</div>
                   <div className="col-span-1">লাভ</div>
                   <div className="col-span-1">প্রতিনিধি<br/>পরিশোধ</div>
                 </div>
@@ -685,28 +693,40 @@ export default function App() {
             </div>
           )}
 
-          {/* ================= 4. ACTIVITY SCREEN ================= */}
-          {currentTab === 'activity' && (
-            <div className="p-4 space-y-4 animate-fadeIn w-full">
-              <div className="bg-white p-4 rounded-2xl shadow-sm border border-gray-200 font-bold text-sm text-gray-800 flex items-center gap-2">
-                <Clock className="w-4 h-4 text-[#113F33]" />
-                সাম্প্রতিক কার্যক্রম (Recent Activity)
-              </div>
-              <div className="bg-white rounded-2xl shadow-sm border border-gray-200 overflow-hidden w-full">
-                <div className="divide-y divide-gray-100">
-                  {orders.slice(0, 20).map((order) => (
-                    <div key={order.id} className="p-4 flex justify-between items-start text-sm hover:bg-gray-50 transition">
-                      <div>
-                        <div className="font-bold text-gray-900">বিক্রি: {order.customerName}</div>
-                        <div className="text-xs text-gray-500">{order.date} • ইনভয়েস: {order.invoiceNo}</div>
-                      </div>
-                      <div className="font-bold text-emerald-700">{order.total}৳</div>
-                    </div>
-                  ))}
-                  {orders.length === 0 && (
-                    <div className="p-8 text-center text-gray-500 text-sm">কোনো সাম্প্রতিক কার্যক্রম নেই।</div>
-                  )}
+          {currentTab === 'ledger' && (
+            <div className="animate-fadeIn w-full h-full flex flex-col">
+              {/* Summary Section */}
+              <div className="grid grid-cols-2 gap-2 p-2">
+                <div className="bg-white p-3 rounded-xl shadow-sm border border-gray-100 text-center">
+                  <div className="text-[10px] text-gray-500 font-medium">মোট বাকি</div>
+                  <div className="text-sm font-bold text-red-600 tabular-nums">
+                    {customers.reduce((sum, c) => sum + c.dueAmount, 0).toLocaleString('en-IN')} ৳
+                  </div>
                 </div>
+                <div className="bg-white p-3 rounded-xl shadow-sm border border-gray-100 text-center">
+                  <div className="text-[10px] text-gray-500 font-medium">মোট ক্রেতা (unique)</div>
+                  <div className="text-sm font-bold text-gray-900 tabular-nums">{new Set(customers.map(c => c.name)).size}</div>
+                </div>
+              </div>
+
+              {/* Table Header */}
+              <div className="grid grid-cols-5 text-[10px] font-bold text-gray-700 border-b border-gray-200 bg-gray-50 p-2 text-center">
+                <div className="text-left">ক্রেতার নাম</div>
+                <div>মোবাইল</div>
+                <div>ঠিকানা</div>
+                <div>বাকি</div>
+                <div>অ্যাকশন</div>
+              </div>
+              <div className="flex-1 overflow-y-auto">
+                {customers.map(c => (
+                  <div key={c.id} className="grid grid-cols-5 text-[11px] border-b border-gray-100 p-2 items-center text-center">
+                    <div className="text-left font-bold truncate">{c.name}</div>
+                    <div className="text-gray-600">{c.phone}</div>
+                    <div className="text-gray-600 truncate">{c.address}</div>
+                    <div className="font-bold text-red-600 tabular-nums">{c.dueAmount}</div>
+                    <div><button className="text-emerald-700 font-bold underline">পেমেন্ট</button></div>
+                  </div>
+                ))}
               </div>
             </div>
           )}
@@ -717,17 +737,23 @@ export default function App() {
               
 
 
-              {/* Customer Select Option */}
-              <div className="bg-white p-3.5 rounded-2xl shadow-sm border border-gray-200">
-                <label className="text-xs font-bold text-gray-700 block mb-2">গ্রাহক নির্বাচন:</label>
-                <select 
-                  value={selectedExistingCustomer}
-                  onChange={(e) => setSelectedExistingCustomer(e.target.value)}
-                  className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-[#1B7A5E] font-medium"
-                >
-                  <option value="">নগদ ক্রেতা (Walk-in Customer)</option>
-                  {customers.map(c => <option key={c.id} value={c.name}>{c.name}</option>)}
-                </select>
+              {/* Customer Type Selector */}
+              <div className="bg-white p-2 rounded-2xl shadow-sm border border-gray-200">
+                <div className="flex bg-gray-100 rounded-xl p-0.5 mb-2">
+                  <button onClick={() => { setSelectedExistingCustomer(''); setNewCustName(''); }} className={`flex-1 py-1.5 text-xs font-bold rounded-lg ${!selectedExistingCustomer && !newCustName ? 'bg-white shadow' : ''}`}>নগদ</button>
+                  <button onClick={() => { setSelectedExistingCustomer(' '); setNewCustName(''); }} className={`flex-1 py-1.5 text-xs font-bold rounded-lg ${selectedExistingCustomer ? 'bg-white shadow' : ''}`}>পুরাতন</button>
+                  <button onClick={() => { setSelectedExistingCustomer(''); setNewCustName(' '); }} className={`flex-1 py-1.5 text-xs font-bold rounded-lg ${newCustName ? 'bg-white shadow' : ''}`}>নতুন</button>
+                </div>
+                {selectedExistingCustomer && (
+                  <input type="text" placeholder="পুরাতন ক্রেতার নাম লিখুন..." value={selectedExistingCustomer.trim() === '' ? '' : selectedExistingCustomer} onChange={(e) => setSelectedExistingCustomer(e.target.value)} className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-xl text-xs" />
+                )}
+                {newCustName && (
+                  <div className="space-y-1">
+                    <input type="text" placeholder="ক্রেতার নাম" value={newCustName.trim() === '' ? '' : newCustName} onChange={(e) => setNewCustName(e.target.value)} className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-xl text-xs" />
+                    <input type="text" placeholder="ফোন নম্বর" value={newCustPhone} onChange={(e) => setNewCustPhone(e.target.value)} className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-xl text-xs" />
+                    <input type="text" placeholder="লোকেশন" value={newCustAddress} onChange={(e) => setNewCustAddress(e.target.value)} className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-xl text-xs" />
+                  </div>
+                )}
               </div>
 
               {/* Search Bar & Category Chips */}
@@ -827,19 +853,23 @@ export default function App() {
           {currentTab === 'stock' && (
             <div className="p-4 space-y-4 animate-fadeIn">
               
-              {/* Header & Add Product Button */}
-              <div className="bg-white p-3.5 rounded-2xl shadow-sm border border-gray-200 flex items-center justify-between">
-                <div>
-                  <h2 className="font-bold text-sm text-gray-900 flex items-center gap-1.5">
-                    <Package className="w-4 h-4 text-[#1B7A5E]" /> স্টক ও ইনভেন্টরি
-                  </h2>
-                  <p className="text-[11px] text-gray-500">পণ্য মজুদ ও প্রতিনিধি তথ্য</p>
+              {/* Search & Add Product Row */}
+              <div className="flex gap-2 items-center bg-white p-2 rounded-2xl shadow-sm border border-gray-200">
+                <div className="flex-1 relative">
+                  <Search className="w-4 h-4 text-gray-400 absolute left-3 top-2.5" />
+                  <input 
+                    type="text"
+                    placeholder="পণ্য খুঁজুন..."
+                    value={stockSearchQuery}
+                    onChange={(e) => setStockSearchQuery(e.target.value)}
+                    className="w-full pl-9 pr-3 py-2 bg-gray-50 border border-gray-200 rounded-xl text-xs focus:outline-none"
+                  />
                 </div>
                 <button 
                   onClick={() => setIsAddProductOpen(true)}
-                  className="bg-[#1B7A5E] text-white px-3 py-2 rounded-xl text-xs font-bold shadow hover:bg-[#113F33] transition flex items-center gap-1"
+                  className="bg-[#1B7A5E] text-white px-4 py-2 rounded-xl text-xs font-bold shadow hover:bg-[#113F33] transition"
                 >
-                  <Plus className="w-3.5 h-3.5" /> নতুন পণ্য
+                  নতুন পণ্য
                 </button>
               </div>
 
@@ -863,41 +893,6 @@ export default function App() {
                   </button>
                 </div>
               )}
-
-              {/* Search & Filter Tabs */}
-              <div className="space-y-2">
-                <div className="relative">
-                  <Search className="w-4 h-4 text-gray-400 absolute left-3 top-3.5" />
-                  <input 
-                    type="text"
-                    placeholder="পণ্য বা প্রতিনিধি খুঁজুন..."
-                    value={stockSearchQuery}
-                    onChange={(e) => setStockSearchQuery(e.target.value)}
-                    className="w-full pl-9 pr-4 py-2 bg-white border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-[#1B7A5E] shadow-sm"
-                  />
-                </div>
-
-                <div className="flex bg-white rounded-xl p-1 shadow-sm border border-gray-200 text-xs font-medium">
-                  <button 
-                    onClick={() => setStockFilterTab('all')}
-                    className={`flex-1 py-1.5 rounded-lg transition text-center ${stockFilterTab === 'all' ? 'bg-[#113F33] text-white shadow' : 'text-gray-600 hover:bg-gray-100'}`}
-                  >
-                    সব পণ্য ({products.length})
-                  </button>
-                  <button 
-                    onClick={() => setStockFilterTab('sufficient')}
-                    className={`flex-1 py-1.5 rounded-lg transition text-center ${stockFilterTab === 'sufficient' ? 'bg-[#113F33] text-white shadow' : 'text-gray-600 hover:bg-gray-100'}`}
-                  >
-                    পর্যাপ্ত স্টক
-                  </button>
-                  <button 
-                    onClick={() => setStockFilterTab('low')}
-                    className={`flex-1 py-1.5 rounded-lg transition text-center ${stockFilterTab === 'low' ? 'bg-[#113F33] text-white shadow' : 'text-gray-600 hover:bg-gray-100'}`}
-                  >
-                    কম স্টক ({lowStockCount})
-                  </button>
-                </div>
-              </div>
 
               {/* Stock Table / List */}
               <div className="bg-white rounded-2xl shadow-sm border border-gray-200 overflow-hidden">
@@ -1133,20 +1128,6 @@ export default function App() {
           {currentTab === 'ledger' && (
             <div className="p-4 space-y-4 animate-fadeIn">
               
-              {/* Header & Total Due Banner */}
-              <div className="bg-gradient-to-r from-red-800 to-red-900 text-white p-4 rounded-2xl shadow-md space-y-2">
-                <div className="flex justify-between items-center">
-                  <span className="text-xs bg-red-700/80 px-2.5 py-1 rounded-lg font-medium flex items-center gap-1">
-                    <BookOpen className="w-3.5 h-3.5" /> বাকি খাতা (Credit Ledger)
-                  </span>
-                  <span className="text-xs text-red-200">বাকিদার গ্রাহক: {customers.filter(c => c.dueAmount > 0).length} জন</span>
-                </div>
-                <div>
-                  <div className="text-xs text-red-200">সর্বমোট বকেয়া পাওনা</div>
-                  <div className="text-2xl font-extrabold tracking-tight">{totalDueAmount.toLocaleString('en-IN')}</div>
-                </div>
-              </div>
-
               {/* Search & Filter */}
               <div className="relative">
                 <Search className="w-4 h-4 text-gray-400 absolute left-3 top-3.5" />

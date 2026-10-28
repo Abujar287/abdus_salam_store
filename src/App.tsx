@@ -608,6 +608,11 @@ export default function App() {
     setNewCustName('');
     setNewCustPhone('');
     setNewCustAddress('');
+
+    // Trigger Auto-Sync to Google Sheets immediately in background
+    setTimeout(() => {
+      handleSync();
+    }, 300);
   };
 
   // Calculations for Home Metrics
@@ -908,9 +913,13 @@ export default function App() {
                       <p className="text-[11px] text-gray-500">গ্রাহক সিলেক্ট করে পণ্য যোগ করুন</p>
                     </div>
                   </div>
-                  <span className="text-xs font-semibold bg-emerald-50 text-[#1B7A5E] px-2.5 py-1 rounded-lg">
-                    আইটেম: {cart.reduce((sum, i) => sum + i.quantity, 0)}
-                  </span>
+                  <button 
+                    onClick={() => setIsCartModalOpen(true)}
+                    className="bg-[#1B7A5E] hover:bg-[#113F33] text-white font-bold text-xs px-3 py-1.5 rounded-xl shadow-sm flex items-center gap-1.5 transition border border-emerald-600"
+                  >
+                    <ShoppingCart className="w-4 h-4 text-amber-300" />
+                    <span>কার্ট দেখুন ({cart.reduce((sum, i) => sum + i.quantity, 0)}) - {cartTotal.toLocaleString('en-IN')} ৳</span>
+                  </button>
                 </div>
 
                 {/* Customer Selection Options */}
@@ -1065,30 +1074,21 @@ export default function App() {
                   })}
               </div>
 
-              {/* Floating Bottom Cart Bar */}
+              {/* Right-Aligned Floating Cart Button on Far Right Edge */}
               {cart.length > 0 && (
-                <div className="sticky bottom-16 left-0 right-0 z-30 bg-[#113F33] text-white p-2.5 rounded-2xl shadow-xl flex items-center justify-between border-2 border-[#1B7A5E] mt-3">
-                  <div className="flex items-center space-x-2.5">
-                    <div className="w-8 h-8 rounded-xl bg-[#1B7A5E] flex items-center justify-center font-bold text-xs relative flex-shrink-0">
-                      <ShoppingCart className="w-4 h-4 text-white" />
-                      <span className="absolute -top-1 -right-1 bg-amber-400 text-gray-900 rounded-full w-4 h-4 text-[9px] flex items-center justify-center font-bold">
-                        {cart.reduce((s, i) => s + i.quantity, 0)}
-                      </span>
-                    </div>
-                    <div>
-                      <div className="text-xs font-bold text-white">{cartTotal.toLocaleString('en-IN')}</div>
-                      <div className="text-[10px] text-emerald-200">{cart.length} টি পণ্য কার্টে আছে</div>
-                    </div>
+                <button 
+                  onClick={() => setIsCartModalOpen(true)}
+                  className="fixed bottom-20 right-4 lg:right-8 z-40 bg-[#1B7A5E] hover:bg-[#113F33] text-white py-2.5 px-3.5 rounded-2xl font-bold shadow-2xl flex items-center gap-2 border-2 border-amber-400 transition hover:scale-105"
+                  title="কার্ট বিবরণী দেখুন"
+                >
+                  <ShoppingCart className="w-5 h-5 text-amber-300" />
+                  <div className="text-left leading-none">
+                    <span className="text-[10px] text-emerald-200 block font-normal">কার্ট চেকআউট</span>
+                    <span className="text-xs font-bold text-white whitespace-nowrap">
+                      {cart.reduce((s, i) => s + i.quantity, 0)} টি • {cartTotal.toLocaleString('en-IN')} ৳
+                    </span>
                   </div>
-                  
-                  <button 
-                    onClick={() => setIsCartModalOpen(true)}
-                    className="bg-[#1B7A5E] hover:bg-emerald-600 text-white font-bold text-xs px-3.5 py-1.5 rounded-xl shadow flex items-center gap-1 transition"
-                  >
-                    <span>কার্ট দেখুন</span>
-                    <ChevronRight className="w-4 h-4" />
-                  </button>
-                </div>
+                </button>
               )}
 
             </div>
@@ -2033,8 +2033,10 @@ function handleRequest(e) {
 
     // 1. Tab: bikri
     var bikriSheet = ss.getSheetByName('bikri') || ss.insertSheet('bikri');
-    if (bikriSheet.getLastRow() === 0) {
-      bikriSheet.appendRow(['invoice no', 'date', 'customer name', 'customer mobile', 'location', 'product name', 'category', 'cost', 'sales', 'discount', 'baki', 'payment method', 'profit']);
+    var bikriHeaders = ['invoice no', 'date', 'customer name', 'customer mobile', 'location', 'product name', 'category', 'cost', 'sales', 'discount', 'baki', 'payment method', 'profit'];
+    if (bikriSheet.getLastRow() === 0 || bikriSheet.getRange(1, 3).getValue() !== 'customer name') {
+      bikriSheet.clear();
+      bikriSheet.getRange(1, 1, 1, 13).setValues([bikriHeaders]);
     }
     if (data && data.bikri && data.bikri.length > 0) {
       var existingData = bikriSheet.getDataRange().getValues();

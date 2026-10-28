@@ -51,7 +51,7 @@ const STORE_NAME = 'আব্দুস সালাম স্টোর';
 const STORE_PHONE = '01969249225';
 const STORE_ADDRESS = 'রায়পুর বাজার, বাঘারপাড়া, যশোর';
 
-// Types
+/// Types
 interface Product {
   id: string;
   name: string;
@@ -108,130 +108,8 @@ interface DateHistoryRecord {
   totalRepPayment: number;
 }
 
-// Initial Mock Data
-const INITIAL_PRODUCTS: Product[] = [
-  { id: 'p1', name: 'মিনা চাল (মিনিকেট) ৫০ কেজি', category: 'মুদি', stock: 12, unit: 'বস্তা', buyPrice: 3200, sellPrice: 3450, barcode: '1001', repName: 'আবুল কালাম', repPhone: '01711001122', searchTags: ['cal', 'chal', 'rice', 'miniket', 'চাল', 'মিনা চাল', 'miniket chal'] },
-  { id: 'p2', name: 'ফ্রেশ সয়াবিন তেল ১ লিটার', category: 'তেল ও মসলা', stock: 8, unit: 'লিটার', buyPrice: 160, sellPrice: 175, barcode: '1002', repName: 'রফিকুল ইসলাম', repPhone: '01822334455', searchTags: ['oil', 'tel', 'soyabean', 'fresh', 'তেল', 'সয়াবিন তেল'] },
-  { id: 'p3', name: 'রূপসী বাংলা চিনি ১ কেজি', category: 'মুদি', stock: 5, unit: 'কেজি', buyPrice: 125, sellPrice: 135, barcode: '1003', repName: 'আবুল কালাম', repPhone: '01711001122', searchTags: ['sugar', 'chini', 'cini', 'চিনি'] },
-  { id: 'p4', name: 'দেশি মসুর ডাল (মোটা) ১ কেজি', category: 'মুদি', stock: 18, unit: 'কেজি', buyPrice: 110, sellPrice: 130, barcode: '1004', repName: 'নজরুল ইসলাম', repPhone: '01933445566', searchTags: ['dal', 'lentil', 'mosur', 'ডাল', 'মসুর ডাল'] },
-  { id: 'p5', name: 'আড়ং ঘি ৫০০ গ্রাম', category: 'মুদি', stock: 3, unit: 'কোটা', buyPrice: 850, sellPrice: 950, barcode: '1005', repName: 'রফিকুল ইসলাম', repPhone: '01822334455', searchTags: ['ghee', 'ghii', 'aarong', 'ঘি'] },
-  { id: 'p6', name: 'প্রাণ ফ্রুটো ১ লিটার', category: 'পানীয়', stock: 25, unit: 'বটল', buyPrice: 110, sellPrice: 130, barcode: '1006', repName: 'সোহেল রানা', repPhone: '01644556677', searchTags: ['juice', 'drink', 'fruto', 'pran', 'জুস', 'পানীয়', 'ফ্রুটো'] },
-  { id: 'p7', name: 'রংধনু লবণ ১ কেজি', category: 'মুদি', stock: 45, unit: 'কেজি', buyPrice: 35, sellPrice: 40, barcode: '1007', repName: 'আবুল কালাম', repPhone: '01711001122', searchTags: ['salt', 'lobon', 'lobhon', 'লবণ'] },
-  { id: 'p8', name: 'পার্লে জি বিস্কুট (বড় প্যাকেট)', category: 'বিস্কুট ও স্ন্যাক্স', stock: 6, unit: 'পিস', buyPrice: 45, sellPrice: 55, barcode: '1008', repName: 'সোহেল রানা', repPhone: '01644556677', searchTags: ['biscuit', 'biskut', 'parle', 'snacks', 'বিস্কুট'] },
-  { id: 'p9', name: 'লাক্স সাবান (গোলাপী)', category: 'প্রসাধন', stock: 4, unit: 'পিস', buyPrice: 38, sellPrice: 45, barcode: '1009', repName: 'নজরুল ইসলাম', repPhone: '01933445566', searchTags: ['soap', 'saban', 'lux', 'সাবান'] },
-  { id: 'p10', name: 'হলুদ গুঁড়া (রাঁধুনি) ২০০ গ্রাম', category: 'তেল ও মসলা', stock: 15, unit: 'প্যাকেট', buyPrice: 65, sellPrice: 78, barcode: '1010', repName: 'রফিকুল ইসলাম', repPhone: '01822334455', searchTags: ['turmeric', 'holud', 'masala', 'মসলা', 'হলুদ'] },
-  { id: 'p11', name: 'সরিষার তেল (সাচী) ১ লিটার', category: 'তেল ও মসলা', stock: 2, unit: 'লিটার', buyPrice: 220, sellPrice: 250, barcode: '1011', repName: 'রফিকুল ইসলাম', repPhone: '01822334455', searchTags: ['mustard', 'oil', 'sorisha', 'সরিষার তেল'] },
-  { id: 'p12', name: 'মরিচ গুঁড়া (রাঁধুনি) ২০০ গ্রাম', category: 'তেল ও মসলা', stock: 1, unit: 'প্যাকেট', buyPrice: 90, sellPrice: 110, barcode: '1012', repName: 'রফিকুল ইসলাম', repPhone: '01822334455', searchTags: ['chili', 'morich', 'powder', 'মরিচ গুঁড়া'] }
-];
-
-const INITIAL_CUSTOMERS: Customer[] = [
-  { id: 'c1', name: 'রহিম মিয়া', phone: '01711234567', address: 'রায়পুর বাজার', dueAmount: 12500, lastPurchaseDate: '27-Oct-26', status: 'pending' },
-  { id: 'c2', name: 'করিম উদ্দিন', phone: '01822345678', address: 'বাঘারপাড়া', dueAmount: 8400, lastPurchaseDate: '26-Oct-26', status: 'pending' },
-  { id: 'c3', name: 'আমেনা বেগম', phone: '01933456789', address: 'যশোর রোড', dueAmount: 0, lastPurchaseDate: '25-Oct-26', status: 'clear' },
-  { id: 'c4', name: 'আব্দুল জব্বার', phone: '01644567890', address: 'স্টেশন রোড', dueAmount: 15600, lastPurchaseDate: '24-Oct-26', status: 'pending' },
-  { id: 'c5', name: 'শরিফুল ইসলাম', phone: '01555678901', address: 'মাস্টার পাড়া', dueAmount: 6000, lastPurchaseDate: '23-Oct-26', status: 'pending' }
-];
-
-const INITIAL_ORDERS: Order[] = [
-  {
-    id: 'ord-101',
-    invoiceNo: 'SAL-2026-101',
-    customerName: 'রহিম মিয়া',
-    customerPhone: '01711234567',
-    items: [
-      { product: INITIAL_PRODUCTS[0], quantity: 1 },
-      { product: INITIAL_PRODUCTS[1], quantity: 2 }
-    ],
-    subtotal: 3800,
-    discount: 50,
-    total: 3750,
-    paid: 1000,
-    due: 2750,
-    paymentType: 'credit',
-    date: '28-Oct-26',
-    rawDate: '2026-10-28',
-    status: 'pending'
-  },
-  {
-    id: 'ord-102',
-    invoiceNo: 'SAL-2026-100',
-    customerName: 'নগদ ক্রেতা',
-    customerPhone: '-',
-    items: [
-      { product: INITIAL_PRODUCTS[2], quantity: 2 },
-      { product: INITIAL_PRODUCTS[5], quantity: 3 }
-    ],
-    subtotal: 660,
-    discount: 10,
-    total: 650,
-    paid: 650,
-    due: 0,
-    paymentType: 'cash',
-    date: '28-Oct-26',
-    rawDate: '2026-10-28',
-    status: 'completed'
-  },
-  {
-    id: 'ord-099',
-    invoiceNo: 'SAL-2026-099',
-    customerName: 'করিম উদ্দিন',
-    customerPhone: '01822345678',
-    items: [
-      { product: INITIAL_PRODUCTS[1], quantity: 5 },
-      { product: INITIAL_PRODUCTS[3], quantity: 2 }
-    ],
-    subtotal: 1135,
-    discount: 35,
-    total: 1100,
-    paid: 1100,
-    due: 0,
-    paymentType: 'cash',
-    date: '27-Oct-26',
-    rawDate: '2026-10-27',
-    status: 'completed'
-  },
-  {
-    id: 'ord-098',
-    invoiceNo: 'SAL-2026-098',
-    customerName: 'আব্দুল জব্বার',
-    customerPhone: '01644567890',
-    items: [
-      { product: INITIAL_PRODUCTS[0], quantity: 2 },
-      { product: INITIAL_PRODUCTS[4], quantity: 1 }
-    ],
-    subtotal: 7850,
-    discount: 150,
-    total: 7700,
-    paid: 5000,
-    due: 2700,
-    paymentType: 'credit',
-    date: '26-Oct-26',
-    rawDate: '2026-10-26',
-    status: 'pending'
-  },
-  {
-    id: 'ord-097',
-    invoiceNo: 'SAL-2026-097',
-    customerName: 'আমেনা বেগম',
-    customerPhone: '01933456789',
-    items: [
-      { product: INITIAL_PRODUCTS[6], quantity: 5 },
-      { product: INITIAL_PRODUCTS[7], quantity: 4 }
-    ],
-    subtotal: 420,
-    discount: 20,
-    total: 400,
-    paid: 400,
-    due: 0,
-    paymentType: 'cash',
-    date: '25-Oct-26',
-    rawDate: '2026-10-25',
-    status: 'completed'
-  }
-];
-
 export default function App() {
-  const [currentTab, setCurrentTab] = useState<'home' | 'pos' | 'stock' | 'ledger' | 'more'>('home');
+  const [currentTab, setCurrentTab] = useState<'home' | 'pos' | 'stock' | 'ledger' | 'activity' | 'more'>('home');
   const [timeframe, setTimeframe] = useState<'today' | 'week' | 'month'>('today');
   
   // Auto-detect screen size on initial load and resize
@@ -253,24 +131,34 @@ export default function App() {
   // States with LocalStorage Persistence
   const [products, setProducts] = useState<Product[]>(() => {
     const saved = localStorage.getItem('abdus_store_products');
-    return saved ? JSON.parse(saved) : INITIAL_PRODUCTS;
+    return saved ? JSON.parse(saved) : [];
   });
+
+  // Exit Confirmation
+  useEffect(() => {
+    const handleBeforeUnload = (e: BeforeUnloadEvent) => {
+      e.preventDefault();
+      e.returnValue = '';
+    };
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    return () => window.removeEventListener('beforeunload', handleBeforeUnload);
+  }, []);
 
   const [customers, setCustomers] = useState<Customer[]>(() => {
     const saved = localStorage.getItem('abdus_store_customers');
-    return saved ? JSON.parse(saved) : INITIAL_CUSTOMERS;
+    return saved ? JSON.parse(saved) : [];
   });
 
   const [orders, setOrders] = useState<Order[]>(() => {
     const saved = localStorage.getItem('abdus_store_orders');
-    return saved ? JSON.parse(saved) : INITIAL_ORDERS;
+    return saved ? JSON.parse(saved) : [];
   });
   const [newCustomersCountToday, setNewCustomersCountToday] = useState<number>(3);
   
   // POS Cart State
   const [cart, setCart] = useState<CartItem[]>([]);
-  const [posCustomerType, setPosCustomerType] = useState<'cash' | 'existing' | 'new'>('cash');
-  const [selectedExistingCustomer, setSelectedExistingCustomer] = useState<string>(INITIAL_CUSTOMERS[0].name);
+  // const [posCustomerType, setPosCustomerType] = useState<'cash' | 'existing' | 'new'>('cash'); // REMOVED
+  const [selectedExistingCustomer, setSelectedExistingCustomer] = useState<string>('');
   const [newCustName, setNewCustName] = useState<string>('');
   const [newCustPhone, setNewCustPhone] = useState<string>('');
   const [newCustAddress, setNewCustAddress] = useState<string>('');
@@ -732,10 +620,10 @@ export default function App() {
           
           {/* ================= 1. HOME / DASHBOARD SCREEN ================= */}
           {currentTab === 'home' && (
-            <div className="p-4 space-y-4 animate-fadeIn">
+            <div className="p-4 space-y-4 animate-fadeIn w-full max-w-full">
               
               {/* Timeframe selector tabs */}
-              <div className="flex bg-white rounded-xl p-1 shadow-sm border border-gray-200 text-sm font-medium">
+              <div className="flex bg-white rounded-xl p-1 shadow-sm border border-gray-200 text-sm font-medium w-full max-w-2xl mx-auto">
                 <button 
                   onClick={() => setTimeframe('today')}
                   className={`flex-1 py-1.5 rounded-lg transition text-center ${timeframe === 'today' ? 'bg-[#113F33] text-white shadow' : 'text-gray-600 hover:bg-gray-100'}`}
@@ -756,139 +644,32 @@ export default function App() {
                 </button>
               </div>
 
-              {/* Summary Cards Grid */}
-              <div className={`grid gap-3 ${isMobileView ? 'grid-cols-2' : 'grid-cols-3 md:grid-cols-6'}`}>
-                
-                {/* 1. অর্ডার */}
-                <div className="bg-white p-3.5 rounded-2xl shadow-sm border border-gray-100 relative overflow-hidden">
-                  <div className="absolute top-0 right-0 w-16 h-16 bg-blue-50 rounded-bl-full -mr-3 -mt-3 z-0"></div>
-                  <div className="relative z-10">
-                    <div className="flex items-center justify-between text-gray-500 mb-1">
-                      <span className="text-xs font-medium">অর্ডার</span>
-                      <div className="w-7 h-7 rounded-lg bg-blue-100 text-blue-700 flex items-center justify-center">
-                        <ShoppingBagIcon className="w-4 h-4" />
-                      </div>
-                    </div>
-                    <div className="text-xl font-bold text-gray-900">{totalOrdersCount}</div>
-                    <div className="text-[11px] text-blue-600 font-medium mt-1">সফল লেনদেন</div>
+              {/* Compact Summary Cards */}
+              <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-2 w-full max-w-5xl mx-auto">
+                {[
+                  { label: 'অর্ডার', val: totalOrdersCount, color: 'text-blue-600' },
+                  { label: 'বিক্রি', val: totalSalesAmount.toLocaleString('en-IN'), color: 'text-emerald-600' },
+                  { label: 'লাভ', val: totalProfitAmount.toLocaleString('en-IN'), color: 'text-teal-600' },
+                  { label: 'গ্রাহক', val: totalCustomersCount, color: 'text-indigo-600' },
+                  { label: 'নতুন', val: newCustomersCount, color: 'text-purple-600' },
+                  { label: 'কমিশন', val: totalRepPayment.toLocaleString('en-IN'), color: 'text-orange-600' },
+                ].map((item, i) => (
+                  <div key={i} className="bg-white p-3 rounded-xl shadow-sm border border-gray-100 text-center">
+                    <div className="text-[11px] text-gray-500">{item.label}</div>
+                    <div className={`text-base font-bold ${item.color}`}>{item.val}</div>
                   </div>
-                </div>
-
-                {/* 2. গ্রাহক */}
-                <div className="bg-white p-3.5 rounded-2xl shadow-sm border border-gray-100 relative overflow-hidden">
-                  <div className="absolute top-0 right-0 w-16 h-16 bg-indigo-50 rounded-bl-full -mr-3 -mt-3 z-0"></div>
-                  <div className="relative z-10">
-                    <div className="flex items-center justify-between text-gray-500 mb-1">
-                      <span className="text-xs font-medium">গ্রাহক</span>
-                      <div className="w-7 h-7 rounded-lg bg-indigo-100 text-indigo-700 flex items-center justify-center">
-                        <User className="w-4 h-4" />
-                      </div>
-                    </div>
-                    <div className="text-xl font-bold text-gray-900">{totalCustomersCount}</div>
-                    <div className="text-[11px] text-indigo-600 font-medium mt-1">রেজিস্টার্ড ক্রেতা</div>
-                  </div>
-                </div>
-
-                {/* 3. নতুন গ্রাহক */}
-                <div className="bg-white p-3.5 rounded-2xl shadow-sm border border-gray-100 relative overflow-hidden">
-                  <div className="absolute top-0 right-0 w-16 h-16 bg-purple-50 rounded-bl-full -mr-3 -mt-3 z-0"></div>
-                  <div className="relative z-10">
-                    <div className="flex items-center justify-between text-gray-500 mb-1">
-                      <span className="text-xs font-medium">নতুন গ্রাহক</span>
-                      <div className="w-7 h-7 rounded-lg bg-purple-100 text-purple-700 flex items-center justify-center">
-                        <UserPlus className="w-4 h-4" />
-                      </div>
-                    </div>
-                    <div className="text-xl font-bold text-gray-900">{newCustomersCount}</div>
-                    <div className="text-[11px] text-purple-600 font-medium mt-1">যুক্ত হয়েছেন</div>
-                  </div>
-                </div>
-
-                {/* 4. বিক্রি */}
-                <div className="bg-white p-3.5 rounded-2xl shadow-sm border border-gray-100 relative overflow-hidden">
-                  <div className="absolute top-0 right-0 w-16 h-16 bg-emerald-50 rounded-bl-full -mr-3 -mt-3 z-0"></div>
-                  <div className="relative z-10">
-                    <div className="flex items-center justify-between text-gray-500 mb-1">
-                      <span className="text-xs font-medium">বিক্রি</span>
-                      <div className="w-7 h-7 rounded-lg bg-emerald-100 text-[#113F33] flex items-center justify-center">
-                        <TrendingUp className="w-4 h-4" />
-                      </div>
-                    </div>
-                    <div className="text-xl font-bold text-gray-900">{totalSalesAmount.toLocaleString('en-IN')}</div>
-                    <div className="text-[11px] text-emerald-600 font-medium mt-1">টার্নওভার</div>
-                  </div>
-                </div>
-
-                {/* 5. লাভ */}
-                <div className="bg-white p-3.5 rounded-2xl shadow-sm border border-gray-100 relative overflow-hidden">
-                  <div className="absolute top-0 right-0 w-16 h-16 bg-teal-50 rounded-bl-full -mr-3 -mt-3 z-0"></div>
-                  <div className="relative z-10">
-                    <div className="flex items-center justify-between text-gray-500 mb-1">
-                      <span className="text-xs font-medium">লাভ</span>
-                      <div className="w-7 h-7 rounded-lg bg-teal-100 text-teal-800 flex items-center justify-center">
-                        <DollarSign className="w-4 h-4" />
-                      </div>
-                    </div>
-                    <div className="text-xl font-bold text-emerald-700">{totalProfitAmount.toLocaleString('en-IN')}</div>
-                    <div className="text-[11px] text-teal-600 font-medium mt-1">নিট প্রফিট</div>
-                  </div>
-                </div>
-
-                {/* 6. প্রতিনিধি পরিশোধ */}
-                <div className="bg-white p-3.5 rounded-2xl shadow-sm border border-gray-100 relative overflow-hidden">
-                  <div className="absolute top-0 right-0 w-16 h-16 bg-orange-50 rounded-bl-full -mr-3 -mt-3 z-0"></div>
-                  <div className="relative z-10">
-                    <div className="flex items-center justify-between text-gray-500 mb-1">
-                      <span className="text-xs font-medium">প্রতিনিধি পরিশোধ</span>
-                      <div className="w-7 h-7 rounded-lg bg-orange-100 text-orange-700 flex items-center justify-center">
-                        <CreditCard className="w-4 h-4" />
-                      </div>
-                    </div>
-                    <div className="text-xl font-bold text-orange-700">{totalRepPayment.toLocaleString('en-IN')}</div>
-                    <div className="text-[11px] text-orange-600 font-medium mt-1">কমিশন / পরিশোধ</div>
-                  </div>
-                </div>
-
+                ))}
               </div>
 
-              {/* তারিখভিত্তিক ইতিহাস (Compact vertical card layout to prevent awkward scrolling) */}
-              <div className="bg-white rounded-2xl shadow-sm border border-gray-200 overflow-hidden">
-                <div className="p-3 bg-gray-50 border-b border-gray-200 flex justify-between items-center">
-                  <h3 className="font-bold text-sm text-gray-800 flex items-center gap-1.5">
-                    <Calendar className="w-4 h-4 text-[#1B7A5E]" /> তারিখভিত্তিক ইতিহাস (October 2026)
-                  </h3>
-                  <span className="text-xs bg-emerald-100 text-emerald-800 px-2 py-0.5 rounded font-bold">অটো</span>
-                </div>
-
-                <div className="p-3 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-                  {dateHistoryList.map((record, index) => (
-                    <div key={index} className="bg-gradient-to-r from-gray-50 to-white p-3.5 rounded-2xl border border-gray-200 flex flex-col space-y-2.5 text-xs shadow-xs hover:shadow-sm transition">
-                      <div className="flex justify-between items-center border-b border-gray-200 pb-2">
-                        <span className="font-bold text-gray-900 text-sm flex items-center gap-1.5">
-                          <Calendar className="w-4 h-4 text-[#1B7A5E]" /> {record.date}
-                        </span>
-                        <span className="bg-emerald-100 text-emerald-800 font-bold px-2.5 py-0.5 rounded text-xs">
-                          অর্ডার: {record.totalOrders}
-                        </span>
-                      </div>
-                      <div className="grid grid-cols-2 gap-2 pt-1">
-                        <div className="bg-white p-2 rounded-xl border border-gray-100 shadow-xs">
-                          <span className="text-gray-400 block text-[10px]">বিক্রি</span>
-                          <span className="font-bold text-emerald-700 text-sm">{record.totalSales.toLocaleString('en-IN')} ৳</span>
-                        </div>
-                        <div className="bg-white p-2 rounded-xl border border-gray-100 shadow-xs">
-                          <span className="text-gray-400 block text-[10px]">গ্রাহক / নতুন</span>
-                          <span className="font-bold text-gray-800 text-sm">{record.totalCustomers} / {record.totalNewCustomers}</span>
-                        </div>
-                        <div className="bg-white p-2 rounded-xl border border-gray-100 shadow-xs">
-                          <span className="text-gray-400 block text-[10px]">লাভ</span>
-                          <span className="font-bold text-teal-700 text-sm">{record.totalProfit.toLocaleString('en-IN')} ৳</span>
-                        </div>
-                        <div className="bg-white p-2 rounded-xl border border-gray-100 shadow-xs">
-                          <span className="text-gray-400 block text-[10px]">প্রতিনিধি পরিশোধ</span>
-                          <span className="font-bold text-orange-700 text-sm">{record.totalRepPayment.toLocaleString('en-IN')} ৳</span>
-                        </div>
-                      </div>
+              {/* Compact History List */}
+              <div className="bg-white rounded-2xl shadow-sm border border-gray-200 overflow-hidden w-full max-w-5xl mx-auto">
+                <div className="p-3 bg-gray-50 border-b border-gray-200 text-sm font-bold text-gray-700">তারিখভিত্তিক ইতিহাস</div>
+                <div className="divide-y divide-gray-100">
+                  {dateHistoryList.slice(0, 10).map((record, index) => (
+                    <div key={index} className="p-3 flex items-center justify-between text-sm hover:bg-gray-50 transition">
+                      <span className="font-bold text-gray-800">{record.date}</span>
+                      <span className="text-emerald-700 font-medium">{record.totalSales}৳</span>
+                      <span className="text-teal-700 font-medium">{record.totalProfit}৳</span>
                     </div>
                   ))}
                 </div>
@@ -901,104 +682,37 @@ export default function App() {
           {currentTab === 'pos' && (
             <div className="p-4 space-y-4 animate-fadeIn w-full">
               
-              {/* POS Top Header */}
-              <div className="bg-white p-3.5 rounded-2xl shadow-sm border border-gray-200 space-y-3">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <span className="p-2 rounded-xl bg-[#1B7A5E]/10 text-[#1B7A5E]">
-                      <ShoppingCart className="w-5 h-5" />
-                    </span>
-                    <div>
-                      <h2 className="font-bold text-sm text-gray-900">নতুন বিক্রি (POS কাউন্টার)</h2>
-                      <p className="text-[11px] text-gray-500">গ্রাহক সিলেক্ট করে পণ্য যোগ করুন</p>
-                    </div>
+              {/* POS Header */}
+              <div className="bg-white p-3.5 rounded-2xl shadow-sm border border-gray-200 flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <span className="p-2 rounded-xl bg-[#1B7A5E]/10 text-[#1B7A5E]">
+                    <ShoppingCart className="w-5 h-5" />
+                  </span>
+                  <div>
+                    <h2 className="font-bold text-sm text-gray-900">নতুন বিক্রি</h2>
+                    <p className="text-[11px] text-gray-500">গ্রাহক সিলেক্ট করে পণ্য যোগ করুন</p>
                   </div>
-                  <button 
-                    onClick={() => setIsCartModalOpen(true)}
-                    className="bg-[#1B7A5E] hover:bg-[#113F33] text-white font-bold text-xs px-3 py-1.5 rounded-xl shadow-sm flex items-center gap-1.5 transition border border-emerald-600"
-                  >
-                    <ShoppingCart className="w-4 h-4 text-amber-300" />
-                    <span>কার্ট দেখুন ({cart.reduce((sum, i) => sum + i.quantity, 0)}) - {cartTotal.toLocaleString('en-IN')} ৳</span>
-                  </button>
                 </div>
+                <button 
+                  onClick={() => setIsCartModalOpen(true)}
+                  className="bg-[#1B7A5E] hover:bg-[#113F33] text-white font-bold text-xs px-3 py-1.5 rounded-xl shadow-sm flex items-center gap-1.5 transition border border-emerald-600"
+                >
+                  <ShoppingCart className="w-4 h-4 text-amber-300" />
+                  <span>কার্ট দেখুন ({cart.reduce((sum, i) => sum + i.quantity, 0)}) - {cartTotal.toLocaleString('en-IN')} ৳</span>
+                </button>
+              </div>
 
-                {/* Customer Selection Options */}
-                <div className="space-y-2.5 pt-1 border-t border-gray-100">
-                  <label className="text-xs font-bold text-gray-700 block">গ্রাহকের ধরন:</label>
-                  
-                  <div className="grid grid-cols-3 gap-1.5 bg-gray-100 p-1 rounded-xl text-xs font-medium">
-                    <button 
-                      onClick={() => setPosCustomerType('cash')}
-                      className={`py-1.5 px-2 rounded-lg transition text-center ${posCustomerType === 'cash' ? 'bg-[#113F33] text-white shadow' : 'text-gray-600 hover:bg-white'}`}
-                    >
-                      নগদ ক্রেতা
-                    </button>
-                    <button 
-                      onClick={() => setPosCustomerType('existing')}
-                      className={`py-1.5 px-2 rounded-lg transition text-center ${posCustomerType === 'existing' ? 'bg-[#113F33] text-white shadow' : 'text-gray-600 hover:bg-white'}`}
-                    >
-                      পুরোনো ক্রেতা
-                    </button>
-                    <button 
-                      onClick={() => setPosCustomerType('new')}
-                      className={`py-1.5 px-2 rounded-lg transition text-center ${posCustomerType === 'new' ? 'bg-[#113F33] text-white shadow' : 'text-gray-600 hover:bg-white'}`}
-                    >
-                      নতুন ক্রেতা
-                    </button>
-                  </div>
-
-                  {posCustomerType === 'existing' && (
-                    <div className="flex items-center space-x-2 bg-gray-50 p-2 rounded-xl border border-gray-200">
-                      <User className="w-4 h-4 text-gray-500 ml-1" />
-                      <select 
-                        value={selectedExistingCustomer}
-                        onChange={(e) => setSelectedExistingCustomer(e.target.value)}
-                        className="bg-transparent text-sm font-medium text-gray-800 w-full focus:outline-none"
-                      >
-                        {customers.map(c => (
-                          <option key={c.id} value={c.name}>{c.name} ({c.phone}) - বাকি: {c.dueAmount}</option>
-                        ))}
-                      </select>
-                    </div>
-                  )}
-
-                  {posCustomerType === 'new' && (
-                    <div className="bg-emerald-50/50 p-3 rounded-xl border border-emerald-200 space-y-2">
-                      <div className="text-[11px] font-bold text-[#113F33] flex items-center gap-1">
-                        <UserPlus className="w-3.5 h-3.5" /> নতুন গ্রাহকের তথ্য দিন:
-                      </div>
-                      <div className="grid grid-cols-2 gap-2">
-                        <input 
-                          type="text" 
-                          placeholder="গ্রাহকের নাম *"
-                          value={newCustName}
-                          onChange={(e) => setNewCustName(e.target.value)}
-                          className="px-3 py-1.5 bg-white border border-gray-200 rounded-lg text-xs focus:outline-none focus:border-[#1B7A5E]"
-                        />
-                        <input 
-                          type="text" 
-                          placeholder="মোবাইল নম্বর"
-                          value={newCustPhone}
-                          onChange={(e) => setNewCustPhone(e.target.value)}
-                          className="px-3 py-1.5 bg-white border border-gray-200 rounded-lg text-xs focus:outline-none focus:border-[#1B7A5E]"
-                        />
-                      </div>
-                      <input 
-                        type="text" 
-                        placeholder="গ্রাম / ঠিকানা (ঐচ্ছিক)"
-                        value={newCustAddress}
-                        onChange={(e) => setNewCustAddress(e.target.value)}
-                        className="w-full px-3 py-1.5 bg-white border border-gray-200 rounded-lg text-xs focus:outline-none focus:border-[#1B7A5E]"
-                      />
-                    </div>
-                  )}
-
-                  {posCustomerType === 'cash' && (
-                    <div className="text-[11px] text-gray-500 px-1">
-                      সাধারণ নগদ বিক্রি (Walk-in Customer)
-                    </div>
-                  )}
-                </div>
+              {/* Customer Select Option */}
+              <div className="bg-white p-3.5 rounded-2xl shadow-sm border border-gray-200">
+                <label className="text-xs font-bold text-gray-700 block mb-2">গ্রাহক নির্বাচন:</label>
+                <select 
+                  value={selectedExistingCustomer}
+                  onChange={(e) => setSelectedExistingCustomer(e.target.value)}
+                  className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-[#1B7A5E] font-medium"
+                >
+                  <option value="">নগদ ক্রেতা (Walk-in Customer)</option>
+                  {customers.map(c => <option key={c.id} value={c.name}>{c.name}</option>)}
+                </select>
               </div>
 
               {/* Search Bar & Category Chips */}
@@ -1388,7 +1102,19 @@ export default function App() {
             </div>
           )}
 
-          {/* ================= 4. SALES LEDGER ("বাকি খাতা" SCREEN) ================= */}
+          {/* ================= 4. ACTIVITY LOG SCREEN ================= */}
+          {currentTab === 'activity' && (
+            <div className="p-4 space-y-4 animate-fadeIn w-full max-w-5xl mx-auto">
+              <div className="bg-white p-4 rounded-2xl shadow-sm border border-gray-200">
+                <h2 className="font-bold text-lg text-gray-900 mb-4">সাম্প্রতিক কার্যক্রম</h2>
+                <div className="space-y-3">
+                  <div className="text-gray-500 text-sm italic">কার্যক্রমের তালিকা এখানে প্রদর্শিত হবে।</div>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* ================= 5. SALES LEDGER ("বাকি খাতা" SCREEN) ================= */}
           {currentTab === 'ledger' && (
             <div className="p-4 space-y-4 animate-fadeIn">
               
@@ -2149,6 +1875,14 @@ function handleRequest(e) {
                 {lowStockCount}
               </span>
             )}
+          </button>
+
+          <button 
+            onClick={() => setCurrentTab('activity')}
+            className={`flex flex-col items-center space-y-0.5 px-3 py-1 rounded-xl transition ${currentTab === 'activity' ? 'bg-[#1B7A5E] text-white font-bold shadow' : 'hover:text-white'}`}
+          >
+            <Clock className="w-5 h-5" />
+            <span className="text-[11px]">এক্টিভিটি</span>
           </button>
 
           <button 

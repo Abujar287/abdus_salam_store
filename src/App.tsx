@@ -178,12 +178,8 @@ export default function App() {
   };
 
   // Categories & Units Lists
-  const [categoriesList, setCategoriesList] = useState<string[]>([
-    'মুদি', 'তেল ও মসলা', 'পানীয়', 'বিস্কুট ও স্ন্যাক্স', 'প্রসাধন'
-  ]);
-  const [unitsList, setUnitsList] = useState<string[]>([
-    'কেজি', 'লিটার', 'পিস', 'বস্তা', 'প্যাকেট', 'কোটা', 'বটল'
-  ]);
+  const [categoriesList, setCategoriesList] = useState<string[]>([]);
+  const [unitsList, setUnitsList] = useState<string[]>([]);
 
   // Stock Screen State
   const [stockSearchQuery, setStockSearchQuery] = useState<string>('');
@@ -207,6 +203,9 @@ export default function App() {
   const [syncTime, setSyncTime] = useState<string>('28-Oct-2026 3:58PM');
   const [isSyncing, setIsSyncing] = useState<boolean>(false);
   const [isScriptModalOpen, setIsScriptModalOpen] = useState<boolean>(false);
+  const [isCategoryModalOpen, setIsCategoryModalOpen] = useState<boolean>(false);
+  const [newCatInput, setNewCatInput] = useState('');
+  const [newUnitInput, setNewUnitInput] = useState('');
 
   const [sheetUrl, setSheetUrl] = useState<string>(() => {
     return localStorage.getItem('google_sheet_url') || 'https://script.google.com/macros/s/AKfycbx6qXyoYua4tUchRlaa0mH78EXxgbvmRWmVpWfxv5v4_At4_QGvwS13H8ruZf1J3bGBeA/exec';
@@ -258,11 +257,12 @@ export default function App() {
 
       const payload = {
         action: 'syncData',
-        tabs: ['bikri', 'stock', 'bakir khata', 'catgeory'],
+        tabs: ['bikri', 'stock', 'bakir khata', 'catgeory', 'units'],
         bikri: formattedBikri,
         stock: products,
         'bakir khata': customers,
         catgeory: categoriesList,
+        units: unitsList,
         timestamp: new Date().toISOString()
       };
 
@@ -973,6 +973,8 @@ export default function App() {
                                     setCategoriesList([...categoriesList, formatted]);
                                   }
                                   setNewProductCategory(formatted);
+                                } else {
+                                  setNewProductCategory(categoriesList[0]);
                                 }
                               } else {
                                 setNewProductCategory(e.target.value);
@@ -999,6 +1001,8 @@ export default function App() {
                                     setUnitsList([...unitsList, formatted]);
                                   }
                                   setNewProductUnit(formatted);
+                                } else {
+                                  setNewProductUnit(unitsList[0]);
                                 }
                               } else {
                                 setNewProductUnit(e.target.value);
@@ -1260,6 +1264,17 @@ export default function App() {
                   <div className="flex items-center space-x-3">
                     <Printer className="w-4 h-4 text-[#1B7A5E]" />
                     <span className="font-medium text-gray-800">ব্লুটুথ থার্মাল প্রিন্টার সেটিংস</span>
+                  </div>
+                  <ChevronRight className="w-4 h-4 text-gray-400" />
+                </button>
+
+                <button 
+                  onClick={() => setIsCategoryModalOpen(true)}
+                  className="w-full p-3.5 flex items-center justify-between hover:bg-[#1B7A5E]/5 transition text-left"
+                >
+                  <div className="flex items-center space-x-3">
+                    <SlidersHorizontal className="w-4 h-4 text-[#1B7A5E]" />
+                    <span className="font-medium text-gray-800">ক্যাটাগরি ম্যানেজমেন্ট</span>
                   </div>
                   <ChevronRight className="w-4 h-4 text-gray-400" />
                 </button>
@@ -1904,6 +1919,52 @@ function handleRequest(e) {
           </button>
 
         </nav>
+
+        {/* Category & Unit Management Modal */}
+        {isCategoryModalOpen && (
+          <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4 backdrop-blur-sm animate-fadeIn">
+            <div className="bg-white rounded-3xl w-full max-w-sm p-5 space-y-4 shadow-2xl border border-gray-200">
+              <div className="flex justify-between items-center border-b border-gray-200 pb-3">
+                <h3 className="font-bold text-sm text-gray-900">ক্যাটাগরি ও একক ম্যানেজমেন্ট</h3>
+                <button onClick={() => { setIsCategoryModalOpen(false); handleSync(); }} className="text-gray-400 hover:text-gray-600"><X className="w-4 h-4" /></button>
+              </div>
+              
+              <div className="space-y-4">
+                <div className="space-y-2">
+                  <h4 className="text-xs font-bold text-gray-600">ক্যাটাগরি</h4>
+                  <div className="flex gap-2">
+                    <input type="text" value={newCatInput} onChange={(e) => setNewCatInput(e.target.value)} placeholder="নতুন ক্যাটাগরি..." className="flex-1 px-3 py-2 bg-gray-50 border border-gray-200 rounded-xl text-xs" />
+                    <button onClick={() => { if(newCatInput && !categoriesList.includes(newCatInput)) { setCategoriesList([...categoriesList, newCatInput]); setNewCatInput(''); } }} className="px-3 py-2 bg-[#1B7A5E] text-white rounded-xl text-xs font-bold">যোগ</button>
+                  </div>
+                  <div className="flex flex-wrap gap-1">
+                    {categoriesList.map(cat => (
+                      <span key={cat} className="flex items-center gap-1 p-2 bg-gray-50 rounded-lg text-xs">
+                        {cat}
+                        <button onClick={() => setCategoriesList(categoriesList.filter(c => c !== cat))} className="text-red-500"><Trash2 className="w-3 h-3" /></button>
+                      </span>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="space-y-2 pt-2 border-t border-gray-100">
+                  <h4 className="text-xs font-bold text-gray-600">একক (Unit)</h4>
+                  <div className="flex gap-2">
+                    <input type="text" value={newUnitInput} onChange={(e) => setNewUnitInput(e.target.value)} placeholder="নতুন একক..." className="flex-1 px-3 py-2 bg-gray-50 border border-gray-200 rounded-xl text-xs" />
+                    <button onClick={() => { if(newUnitInput && !unitsList.includes(newUnitInput)) { setUnitsList([...unitsList, newUnitInput]); setNewUnitInput(''); } }} className="px-3 py-2 bg-[#1B7A5E] text-white rounded-xl text-xs font-bold">যোগ</button>
+                  </div>
+                  <div className="flex flex-wrap gap-1">
+                    {unitsList.map(u => (
+                      <span key={u} className="flex items-center gap-1 p-2 bg-gray-50 rounded-lg text-xs">
+                        {u}
+                        <button onClick={() => setUnitsList(unitsList.filter(unit => unit !== u))} className="text-red-500"><Trash2 className="w-3 h-3" /></button>
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
 
       </div>
     </div>

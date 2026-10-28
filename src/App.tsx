@@ -195,6 +195,16 @@ export default function App() {
     return `${y}-${m}-${d} ${h}:${min}:${s}`;
   };
 
+  const uniqueById = <T extends { id: string }>(arr: T[]): T[] => {
+    const map = new Map();
+    arr.forEach(item => {
+      if (item.id && !map.has(item.id)) {
+        map.set(item.id, item);
+      }
+    });
+    return Array.from(map.values());
+  };
+
   const getSyncDisplayTime = (date: Date) => {
     const day = date.getDate();
     const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
@@ -415,7 +425,7 @@ export default function App() {
             stickPrice: p.stickPrice ? Number(p.stickPrice) : undefined,
             searchTags: Array.isArray(p.searchTags) ? p.searchTags : [p.name.toLowerCase()]
           }));
-          setProducts(fetchedProducts);
+          setProducts(uniqueById(fetchedProducts));
         }
         
         if (result.bakir_khata && result.bakir_khata.length > 0) {
@@ -425,7 +435,7 @@ export default function App() {
             createdAt: c.createdAt || '01-Jan-26', // Fallback for old customers
             lastPurchaseDate: c.lastPurchaseDate || '01-Jan-26'
           })) as Customer[];
-          setCustomers(fetchedCustomers);
+          setCustomers(uniqueById(fetchedCustomers));
         }
 
         if (result.category && result.category.length > 0) {
@@ -476,7 +486,7 @@ export default function App() {
           });
           
           const sortedOrders = Object.values(fetchedOrdersMap).sort((a, b) => b.invoiceNo.localeCompare(a.invoiceNo));
-          setOrders(sortedOrders);
+          setOrders(uniqueById(sortedOrders));
         }
         return true;
       } else {
@@ -634,7 +644,7 @@ export default function App() {
     const dueAmt = Math.max(0, tot - paidAmt);
 
     const draftOrder: Order = {
-      id: `ord-${Date.now()}`,
+      id: `ord-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`,
       invoiceNo: `SAL-2026-${Math.floor(100 + Math.random() * 900)}`,
       customerName: finalCustomerName,
       customerPhone: finalCustomerPhone,
@@ -674,7 +684,7 @@ export default function App() {
     let updatedCustomers = [...customers];
     if (newCustName.trim()) {
       const newCustObj: Customer = {
-        id: `c-${Date.now()}`,
+            id: `c-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`,
         name: newCustName.trim(),
         phone: newCustPhone.trim() || '01700000000',
         address: newCustAddress.trim() || 'রায়পুর বাজার',
@@ -690,7 +700,7 @@ export default function App() {
       if (!exists && order.due > 0) {
         updatedCustomers = [
           {
-            id: `c-${Date.now()}`,
+                id: `c-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`,
             name: order.customerName,
             phone: order.customerPhone,
             address: 'রায়পুর বাজার',
@@ -1401,7 +1411,7 @@ export default function App() {
                            const sp = Number((document.getElementById('stick_price_new') as HTMLInputElement)?.value) || undefined;
                            
                            const newProd: Product = {
-                             id: `p-${Date.now()}`,
+                             id: `p-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`,
                              name: newProductName,
                              category: newProductCategory,
                              stock: Number(newProductStock) || 0,

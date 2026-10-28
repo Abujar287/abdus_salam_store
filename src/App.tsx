@@ -620,10 +620,10 @@ export default function App() {
           
           {/* ================= 1. HOME / DASHBOARD SCREEN ================= */}
           {currentTab === 'home' && (
-            <div className="p-4 space-y-4 animate-fadeIn w-full max-w-full">
+            <div className="p-4 space-y-4 animate-fadeIn w-full">
               
               {/* Timeframe selector tabs */}
-              <div className="flex bg-white rounded-xl p-1 shadow-sm border border-gray-200 text-sm font-medium w-full max-w-2xl mx-auto">
+              <div className="flex bg-white rounded-xl p-1 shadow-sm border border-gray-200 text-sm font-medium w-full">
                 <button 
                   onClick={() => setTimeframe('today')}
                   className={`flex-1 py-1.5 rounded-lg transition text-center ${timeframe === 'today' ? 'bg-[#113F33] text-white shadow' : 'text-gray-600 hover:bg-gray-100'}`}
@@ -645,7 +645,7 @@ export default function App() {
               </div>
 
               {/* Compact Summary Cards */}
-              <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-2 w-full max-w-5xl mx-auto">
+              <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-2 w-full">
                 {[
                   { label: 'অর্ডার', val: totalOrdersCount, color: 'text-blue-600' },
                   { label: 'বিক্রি', val: totalSalesAmount.toLocaleString('en-IN'), color: 'text-emerald-600' },
@@ -662,14 +662,19 @@ export default function App() {
               </div>
 
               {/* Compact History List */}
-              <div className="bg-white rounded-2xl shadow-sm border border-gray-200 overflow-hidden w-full max-w-5xl mx-auto">
-                <div className="p-3 bg-gray-50 border-b border-gray-200 text-sm font-bold text-gray-700">তারিখভিত্তিক ইতিহাস</div>
+              <div className="bg-white rounded-2xl shadow-sm border border-gray-200 overflow-hidden w-full">
+                <div className="p-4 bg-gradient-to-r from-gray-50 to-white border-b border-gray-200 font-bold text-sm text-gray-800 flex items-center gap-2">
+                  <Calendar className="w-4 h-4 text-[#113F33]" />
+                  তারিখভিত্তিক ইতিহাস
+                </div>
                 <div className="divide-y divide-gray-100">
                   {dateHistoryList.slice(0, 10).map((record, index) => (
-                    <div key={index} className="p-3 flex items-center justify-between text-sm hover:bg-gray-50 transition">
+                    <div key={index} className="p-4 flex items-center justify-between text-sm hover:bg-gray-50 transition">
                       <span className="font-bold text-gray-800">{record.date}</span>
-                      <span className="text-emerald-700 font-medium">{record.totalSales}৳</span>
-                      <span className="text-teal-700 font-medium">{record.totalProfit}৳</span>
+                      <div className="flex gap-4 text-xs font-medium">
+                        <span className="text-emerald-700">বিক্রি: {record.totalSales}৳</span>
+                        <span className="text-teal-700">লাভ: {record.totalProfit}৳</span>
+                      </div>
                     </div>
                   ))}
                 </div>
@@ -678,29 +683,37 @@ export default function App() {
             </div>
           )}
 
+          {/* ================= 4. ACTIVITY SCREEN ================= */}
+          {currentTab === 'activity' && (
+            <div className="p-4 space-y-4 animate-fadeIn w-full">
+              <div className="bg-white p-4 rounded-2xl shadow-sm border border-gray-200 font-bold text-sm text-gray-800 flex items-center gap-2">
+                <Clock className="w-4 h-4 text-[#113F33]" />
+                সাম্প্রতিক কার্যক্রম (Recent Activity)
+              </div>
+              <div className="bg-white rounded-2xl shadow-sm border border-gray-200 overflow-hidden w-full">
+                <div className="divide-y divide-gray-100">
+                  {orders.slice(0, 20).map((order) => (
+                    <div key={order.id} className="p-4 flex justify-between items-start text-sm hover:bg-gray-50 transition">
+                      <div>
+                        <div className="font-bold text-gray-900">বিক্রি: {order.customerName}</div>
+                        <div className="text-xs text-gray-500">{order.date} • ইনভয়েস: {order.invoiceNo}</div>
+                      </div>
+                      <div className="font-bold text-emerald-700">{order.total}৳</div>
+                    </div>
+                  ))}
+                  {orders.length === 0 && (
+                    <div className="p-8 text-center text-gray-500 text-sm">কোনো সাম্প্রতিক কার্যক্রম নেই।</div>
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
+
           {/* ================= 2. POS / SALES SCREEN (নতুন বিক্রি) ================= */}
           {currentTab === 'pos' && (
             <div className="p-4 space-y-4 animate-fadeIn w-full">
               
-              {/* POS Header */}
-              <div className="bg-white p-3.5 rounded-2xl shadow-sm border border-gray-200 flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <span className="p-2 rounded-xl bg-[#1B7A5E]/10 text-[#1B7A5E]">
-                    <ShoppingCart className="w-5 h-5" />
-                  </span>
-                  <div>
-                    <h2 className="font-bold text-sm text-gray-900">নতুন বিক্রি</h2>
-                    <p className="text-[11px] text-gray-500">গ্রাহক সিলেক্ট করে পণ্য যোগ করুন</p>
-                  </div>
-                </div>
-                <button 
-                  onClick={() => setIsCartModalOpen(true)}
-                  className="bg-[#1B7A5E] hover:bg-[#113F33] text-white font-bold text-xs px-3 py-1.5 rounded-xl shadow-sm flex items-center gap-1.5 transition border border-emerald-600"
-                >
-                  <ShoppingCart className="w-4 h-4 text-amber-300" />
-                  <span>কার্ট দেখুন ({cart.reduce((sum, i) => sum + i.quantity, 0)}) - {cartTotal.toLocaleString('en-IN')} ৳</span>
-                </button>
-              </div>
+
 
               {/* Customer Select Option */}
               <div className="bg-white p-3.5 rounded-2xl shadow-sm border border-gray-200">

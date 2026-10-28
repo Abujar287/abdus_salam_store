@@ -61,7 +61,7 @@ const STORE_NAME = 'আব্দুস সালাম স্টোর';
 const STORE_PHONE = '01969249225';
 const STORE_ADDRESS = 'রায়পুর বাজার, বাঘারপাড়া, যশোর';
 const DEFAULT_SHEET_URL = 'https://script.google.com/macros/s/AKfycbx6qXyoYua4tUchRlaa0mH78EXxgbvmRWmVpWfxv5v4_At4_QGvwS13H8ruZf1J3bGBeA/exec';
-const BUILD_VERSION = '2026.10.28.2';
+const BUILD_VERSION = '2026.10.28.4';
 
 
 /// Types
@@ -157,26 +157,31 @@ export default function App() {
       if (dateVal instanceof Date) {
         d = dateVal;
       } else if (typeof dateVal === 'string') {
-        // Handle ISO strings
         if (dateVal.includes('T')) {
           d = new Date(dateVal);
-        } else {
-          // Handle '28-Oct-26' format
+        } else if (dateVal.includes('-')) {
           const parts = dateVal.split('-');
           if (parts.length === 3) {
-            const day = parseInt(parts[0]);
-            const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-            const month = monthNames.indexOf(parts[1]);
-            let year = parseInt(parts[2]);
-            if (year < 100) year += 2000;
-            if (month !== -1) {
-              d = new Date(year, month, day);
-            } else {
+            // Check if it's YYYY-MM-DD or DD-MMM-YY
+            if (parts[0].length === 4) {
               d = new Date(dateVal);
+            } else {
+              const day = parseInt(parts[0]);
+              const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+              const month = monthNames.indexOf(parts[1]);
+              let year = parseInt(parts[2]);
+              if (year < 100) year += 2000;
+              if (month !== -1) {
+                d = new Date(year, month, day);
+              } else {
+                d = new Date(dateVal);
+              }
             }
           } else {
             d = new Date(dateVal);
           }
+        } else {
+          d = new Date(dateVal);
         }
       } else {
         d = new Date(dateVal);
@@ -464,14 +469,8 @@ export default function App() {
             const invNo = String(o['invoice no'] || o.invoice_no || '').trim();
             if (!invNo) return;
 
-            let displayDate = String(o.date || '');
-            let rawDate = displayDate;
-            
-            const parsedDate = new Date(displayDate);
-            if (!isNaN(parsedDate.getTime())) {
-              displayDate = formatDate(parsedDate);
-              rawDate = normalizeDate(parsedDate);
-            }
+            let rawDate = normalizeDate(o.date || o.rawDate || o.datetime);
+            let displayDate = o.date || formatDate(new Date(rawDate));
 
             if (!fetchedOrdersMap[invNo]) {
               fetchedOrdersMap[invNo] = {
@@ -899,13 +898,13 @@ export default function App() {
   };
 
   return (
-    <div className="h-screen w-screen overflow-hidden bg-[#F3F4F6] text-gray-900 font-['Hind_Siliguri',sans-serif] flex flex-col items-center">
+    <div className="h-[100dvh] w-full overflow-hidden bg-[#F3F4F6] text-gray-900 font-['Hind_Siliguri',sans-serif] flex flex-col">
       
       {/* Main Container wrapper: flex-col h-full overflow-hidden */}
-      <div className={`w-full h-full flex flex-col overflow-hidden bg-[#F8FAFC] relative`}>
+      <div className="w-full h-full flex flex-col overflow-hidden bg-[#F8FAFC] relative">
         
         {/* App Header (Fixed Top) */}
-        <header className="flex-none z-30 bg-[#113F33] text-white px-3 py-2 flex items-center justify-between shadow-sm">
+        <header className="flex-none sticky top-0 z-40 bg-[#113F33] text-white px-3 py-2 flex items-center justify-between shadow-md">
           <div className="flex items-center space-x-2 min-w-0">
             <div className="w-8 h-8 rounded-lg bg-white p-0.5 shadow-sm overflow-hidden flex-shrink-0 flex items-center justify-center border border-emerald-500/30">
               <img 
@@ -2322,188 +2321,128 @@ export default function App() {
                 </button>
               </div>
 
-              <p className="text-xs text-gray-600">
-                আপনার গুগল শিটে স্বয়ংক্রিয়ভাবে <b>bikri</b>, <b>stock</b>, <b>bakir khata</b> এবং <b>catgeory</b> ট্যাব ও সঠিক কলাম তৈরি করতে নিচের কোডটি শিটের Extensions &gt; Apps Script এ পেস্ট করে Deploy as Web App (Anyone) দিন:
-              </p>
+              <div className="bg-amber-50 p-3 rounded-xl border border-amber-200 text-[11px] text-amber-800 space-y-1">
+                <p className="font-bold">নির্দেশনা:</p>
+                <ol className="list-decimal ml-4 space-y-1">
+                  <li>নিচের কোডটি কপি করুন।</li>
+                  <li>গুগল শিটে গিয়ে <b>Extensions &gt; Apps Script</b>-এ যান।</li>
+                  <li>আগের সব কোড মুছে দিয়ে এটি পেস্ট করুন।</li>
+                  <li><b>Deploy &gt; New Deployment</b>-এ ক্লিক করে <b>Web App</b> সিলেক্ট করুন।</li>
+                  <li><b>Who has access</b>-এ <b>Anyone</b> দিয়ে <b>Deploy</b> করুন।</li>
+                </ol>
+              </div>
 
-              <div className="bg-gray-900 text-emerald-400 p-3 rounded-xl text-[10px] font-mono overflow-y-auto flex-1 select-all space-y-1">
-                <pre>{`function doPost(e) { return handleRequest(e); }
-function doGet(e) {
-  var action = e.parameter.action;
+              <div className="bg-gray-900 text-emerald-400 p-3 rounded-xl text-[10px] font-mono overflow-y-auto flex-1 select-all space-y-1 border border-gray-700">
+                <pre>{`function doGet(e) {
+  const action = e.parameter.action;
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
   if (action === 'getData') {
-    var ss = SpreadsheetApp.getActiveSpreadsheet();
-    var result = { success: true };
-    var tabs = ['bikri', 'stock', 'bakir khata', 'category', 'units'];
-    tabs.forEach(function(tabName) {
-      var sheet = ss.getSheetByName(tabName);
-      if (sheet) {
-        var data = sheet.getDataRange().getValues();
-        var headers = data[0];
-        var rows = [];
-        for (var i = 1; i < data.length; i++) {
-          var obj = {};
-          var hasData = false;
-          for (var j = 0; j < headers.length; j++) { 
-            obj[headers[j]] = data[i][j]; 
-            if (data[i][j] !== "") hasData = true;
-          }
-          if (hasData) rows.push(obj);
-        }
-        var cleanName = tabName.replace(' ', '_');
-        result[cleanName] = rows;
-      }
-    });
-    return ContentService.createTextOutput(JSON.stringify(result)).setMimeType(ContentService.MimeType.JSON);
+    return ContentService.createTextOutput(JSON.stringify({
+      success: true,
+      stock: getSheetData(ss, 'stock'),
+      bikri: getSheetData(ss, 'bikri'),
+      bakir_khata: getSheetData(ss, 'bakir khata'),
+      category: getSheetData(ss, 'category'),
+      units: getSheetData(ss, 'units')
+    })).setMimeType(ContentService.MimeType.JSON);
   }
-  return ContentService.createTextOutput(JSON.stringify({ success: false, error: 'Invalid action' })).setMimeType(ContentService.MimeType.JSON);
 }
 
-function handleRequest(e) {
-  var lock = LockService.getScriptLock();
+function doPost(e) {
+  const lock = LockService.getScriptLock();
   try {
     lock.waitLock(30000);
-    var ss = SpreadsheetApp.getActiveSpreadsheet();
-    var data = JSON.parse(e.postData.contents);
+    const ss = SpreadsheetApp.getActiveSpreadsheet();
+    const data = JSON.parse(e.postData.contents);
     
-    var bikriSheet = ss.getSheetByName('bikri') || ss.insertSheet('bikri');
-    if(bikriSheet.getLastRow() === 0) bikriSheet.appendRow(['invoice no', 'date', 'customer name', 'customer mobile', 'location', 'product name', 'category', 'cost', 'sales', 'discount', 'baki', 'payment method', 'profit', 'datetime']);
-    
-    if (data.bikri && data.bikri.length > 0) {
-      var existingData = bikriSheet.getDataRange().getValues();
-      var existingKeys = {};
-      for(var x=1; x<existingData.length; x++) { existingKeys[String(existingData[x][0]).trim()] = true; }
-      
-      data.bikri.forEach(function(r) {
-        var invNo = String(r['invoice no']).trim();
-        if (invNo && !existingKeys[invNo]) {
-            // Force date to be a string to avoid Google Sheets auto-formatting issues
-            bikriSheet.appendRow([invNo, "'" + r['date'], r['customer name'], r['customer mobile'], r['location'], r['product name'], r['category'], r['cost'], r['sales'], r['discount'], r['baki'], r['payment method'], r['profit'], r['datetime']]);
-            existingKeys[invNo] = true;
+    if (data.action === 'syncData') {
+      if (data.bikri) {
+        const sheet = ss.getSheetByName('bikri') || ss.insertSheet('bikri');
+        const headers = ['invoice no', 'date', 'customer name', 'customer mobile', 'location', 'product name', 'category', 'cost', 'sales', 'discount', 'baki', 'payment method', 'profit', 'datetime'];
+        
+        // Handle incremental append for bikri
+        const existingData = sheet.getLastRow() > 0 ? sheet.getDataRange().getValues() : [];
+        if (existingData.length === 0) {
+          sheet.appendRow(headers);
         }
-      });
-    }
-
-    // Overwrite sheets that represent current state
-    var sheetsToSync = [
-      { name: 'stock', data: data.stock, headers: ['id', 'name', 'category', 'stock', 'unit', 'buyPrice', 'sellPrice', 'barcode', 'repName', 'repPhone', 'datetime'] },
-      { name: 'bakir khata', data: data['bakir khata'], headers: ['id', 'name', 'phone', 'address', 'dueAmount', 'lastPurchaseDate', 'createdAt', 'status', 'datetime'] },
-      { name: 'category', data: data.category, headers: ['category_name', 'datetime'] },
-      { name: 'units', data: data.units, headers: ['unit_name', 'datetime'] }
-    ];
-
-    sheetsToSync.forEach(function(sInfo) {
-      var sheet = ss.getSheetByName(sInfo.name) || ss.insertSheet(sInfo.name);
-      sheet.clear();
-      sheet.appendRow(sInfo.headers);
-      if (sInfo.data && sInfo.data.length > 0) {
-        var rows = sInfo.data.map(function(item) {
-          return sInfo.headers.map(function(h) { 
-            var val = item[h];
-            // If it's a date-like header, prefix with ' to keep as string
-            if (h.toLowerCase().includes('date')) return "'" + val;
-            return val;
-          });
+        
+        const existingInvoices = {};
+        for (let i = 1; i < existingData.length; i++) {
+          existingInvoices[String(existingData[i][0]).trim()] = true;
+        }
+        
+        data.bikri.forEach(row => {
+          const inv = String(row['invoice no']).trim();
+          if (inv && !existingInvoices[inv]) {
+            const values = headers.map(h => {
+              const val = row[h];
+              if (h === 'date') return "'" + val; // Keep as string
+              return val;
+            });
+            sheet.appendRow(values);
+            existingInvoices[inv] = true;
+          }
         });
-        sheet.getRange(2, 1, rows.length, sInfo.headers.length).setValues(rows);
       }
-    });
-
-    return ContentService.createTextOutput(JSON.stringify({ success: true })).setMimeType(ContentService.MimeType.JSON);
+      
+      if (data.stock) updateFullSheet(ss, 'stock', data.stock);
+      if (data['bakir khata']) updateFullSheet(ss, 'bakir khata', data['bakir khata']);
+      if (data.category) updateFullSheet(ss, 'category', data.category);
+      if (data.units) updateFullSheet(ss, 'units', data.units);
+      
+      return ContentService.createTextOutput(JSON.stringify({ success: true }))
+        .setMimeType(ContentService.MimeType.JSON);
+    }
   } catch (err) {
-    return ContentService.createTextOutput(JSON.stringify({ success: false, error: err.toString() })).setMimeType(ContentService.MimeType.JSON);
+    return ContentService.createTextOutput(JSON.stringify({ success: false, error: err.toString() }))
+      .setMimeType(ContentService.MimeType.JSON);
   } finally {
     lock.releaseLock();
   }
 }
+
+function getSheetData(ss, name) {
+  const sheet = ss.getSheetByName(name) || ss.insertSheet(name);
+  const data = sheet.getDataRange().getValues();
+  if (data.length < 2) return [];
+  const headers = data[0];
+  return data.slice(1).map(row => {
+    const obj = {};
+    headers.forEach((h, i) => {
+      let val = row[i];
+      if (val instanceof Date) val = val.toISOString();
+      obj[h] = val;
+    });
+    return obj;
+  });
+}
+
+function updateFullSheet(ss, name, data) {
+  const sheet = ss.getSheetByName(name) || ss.insertSheet(name);
+  sheet.clear();
+  if (!data || data.length === 0) return;
+  const headers = Object.keys(data[0]);
+  sheet.appendRow(headers);
+  const values = data.map(row => headers.map(h => row[h]));
+  sheet.getRange(2, 1, values.length, headers.length).setValues(values);
 }`}</pre>
               </div>
 
               <div className="flex gap-2 pt-1">
                 <button 
                    onClick={() => {
-                    const scriptCode = `function doGet(e) {
-  const action = e.parameter.action;
-  const sheet = SpreadsheetApp.getActiveSpreadsheet();
-  if (action === 'getData') {
-    return ContentService.createTextOutput(JSON.stringify({
-      success: true,
-      stock: getSheetData(sheet, 'stock'),
-      bikri: getSheetData(sheet, 'bikri'),
-      bakir_khata: getSheetData(sheet, 'bakir khata'),
-      category: getSheetData(sheet, 'category'),
-      units: getSheetData(sheet, 'units')
-    })).setMimeType(ContentService.MimeType.JSON);
-  }
-}
-
-function doPost(e) {
-  try {
-    const data = JSON.parse(e.postData.contents);
-    const action = data.action;
-    const sheet = SpreadsheetApp.getActiveSpreadsheet();
-    if (action === 'syncData') {
-      if (data.bikri) updateSheet(sheet, 'bikri', data.bikri);
-      if (data.stock) updateSheet(sheet, 'stock', data.stock);
-      if (data['bakir khata']) updateSheet(sheet, 'bakir khata', data['bakir khata']);
-      if (data.category) updateSheet(sheet, 'category', data.category);
-      if (data.units) updateSheet(sheet, 'units', data.units);
-      return ContentService.createTextOutput(JSON.stringify({ success: true }))
-        .setMimeType(ContentService.MimeType.JSON);
-    }
-    return ContentService.createTextOutput(JSON.stringify({ success: false, error: 'Invalid action' }))
-      .setMimeType(ContentService.MimeType.JSON);
-  } catch (err) {
-    return ContentService.createTextOutput(JSON.stringify({ success: false, error: err.toString() }))
-      .setMimeType(ContentService.MimeType.JSON);
-  }
-}
-
-function getSheetData(ss, sheetName) {
-  let sheet = ss.getSheetByName(sheetName);
-  if (!sheet) { sheet = ss.insertSheet(sheetName); return []; }
-  const data = sheet.getDataRange().getValues();
-  if (data.length < 2) return [];
-  const headers = data[0];
-  const rows = data.slice(1);
-  return rows.map(row => {
-    const obj = {};
-    headers.forEach((header, i) => {
-      let val = row[i];
-      if (val instanceof Date) { val = val.toISOString(); }
-      obj[header.toString().toLowerCase().trim()] = val;
-    });
-    return obj;
-  });
-}
-
-function updateSheet(ss, sheetName, data) {
-  let sheet = ss.getSheetByName(sheetName);
-  if (!sheet) { sheet = ss.insertSheet(sheetName); }
-  sheet.clear();
-  if (data.length === 0) return;
-  const headers = Object.keys(data[0]);
-  sheet.getRange(1, 1, 1, headers.length).setValues([headers]);
-  const values = data.map(row => {
-    return headers.map(header => {
-      let val = row[header];
-      if (Array.isArray(val)) return JSON.stringify(val);
-      if (typeof val === 'object' && val !== null) return JSON.stringify(val);
-      return val;
-    });
-  });
-  sheet.getRange(2, 1, values.length, headers.length).setValues(values);
-}`;
-
-                    navigator.clipboard.writeText(scriptCode);
+                    const pre = document.querySelector('pre');
+                    const code = pre ? pre.innerText : '';
+                    navigator.clipboard.writeText(code);
                     alert('কোড কপি করা হয়েছে!');
                   }}
-                  className="flex-1 py-2 rounded-xl bg-[#1B7A5E] text-white font-bold text-xs shadow hover:bg-[#113F33] transition"
+                  className="flex-1 py-2.5 rounded-xl bg-[#1B7A5E] text-white font-bold text-xs shadow hover:bg-[#113F33] transition"
                 >
                   কোড কপি করুন
                 </button>
                 <button 
                   onClick={() => setIsScriptModalOpen(false)}
-                  className="px-4 py-2 rounded-xl bg-gray-100 text-gray-700 font-bold text-[#113F33] text-xs hover:bg-gray-200 transition font-bold"
+                  className="px-4 py-2 rounded-xl bg-gray-100 text-gray-700 font-bold text-xs hover:bg-gray-200 transition"
                 >
                   বন্ধ করুন
                 </button>
@@ -2513,7 +2452,7 @@ function updateSheet(ss, sheetName, data) {
         )}
 
         {/* Always Visible Fixed Bottom Navigation Footer */}
-        <nav className="flex-none bg-[#113F33] text-emerald-100 border-t border-[#1B7A5E] py-2.5 px-2 flex justify-around items-center z-30 shadow-lg">
+        <nav className="fixed bottom-0 left-0 right-0 h-16 bg-[#113F33] text-emerald-100 border-t border-[#1B7A5E] px-2 flex justify-around items-center z-40 shadow-[0_-4px_10px_rgba(0,0,0,0.1)]">
           
           <button 
             onClick={() => setCurrentTab('home')}

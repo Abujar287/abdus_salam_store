@@ -129,10 +129,7 @@ export default function App() {
   }, []);
 
   // States with LocalStorage Persistence
-  const [products, setProducts] = useState<Product[]>(() => {
-    const saved = localStorage.getItem('abdus_store_products');
-    return saved ? JSON.parse(saved) : [];
-  });
+  const [products, setProducts] = useState<Product[]>([]);
 
   // Exit Confirmation
   useEffect(() => {
@@ -144,15 +141,9 @@ export default function App() {
     return () => window.removeEventListener('beforeunload', handleBeforeUnload);
   }, []);
 
-  const [customers, setCustomers] = useState<Customer[]>(() => {
-    const saved = localStorage.getItem('abdus_store_customers');
-    return saved ? JSON.parse(saved) : [];
-  });
+  const [customers, setCustomers] = useState<Customer[]>([]);
 
-  const [orders, setOrders] = useState<Order[]>(() => {
-    const saved = localStorage.getItem('abdus_store_orders');
-    return saved ? JSON.parse(saved) : [];
-  });
+  const [orders, setOrders] = useState<Order[]>([]);
   const [newCustomersCountToday, setNewCustomersCountToday] = useState<number>(3);
   
   // POS Cart State
@@ -385,11 +376,14 @@ export default function App() {
     let finalCustomerName = 'নগদ ক্রেতা';
     let finalCustomerPhone = '-';
 
-    if (posCustomerType === 'existing') {
+    const isExisting = selectedExistingCustomer.trim() !== '';
+    const isNew = newCustName.trim() !== '';
+
+    if (isExisting) {
       finalCustomerName = selectedExistingCustomer;
       const found = customers.find(c => c.name === selectedExistingCustomer);
       if (found) finalCustomerPhone = found.phone;
-    } else if (posCustomerType === 'new') {
+    } else if (isNew) {
       if (!newCustName.trim()) {
         alert('দয়া করে নতুন ক্রেতার নাম লিখুন');
         return;
@@ -401,7 +395,7 @@ export default function App() {
     const sub = cartSubtotal;
     const disc = discountInput;
     const tot = cartTotal;
-    const paidAmt = cashPaidInput !== '' ? Number(cashPaidInput) : (posCustomerType === 'cash' ? tot : 0);
+    const paidAmt = cashPaidInput !== '' ? Number(cashPaidInput) : (!isExisting && !isNew ? tot : 0);
     const dueAmt = Math.max(0, tot - paidAmt);
 
     const draftOrder: Order = {
@@ -441,7 +435,7 @@ export default function App() {
     });
 
     // If new customer with due or payment
-    if (posCustomerType === 'new' && newCustName.trim()) {
+    if (newCustName.trim()) {
       const newCustObj: Customer = {
         id: `c-${Date.now()}`,
         name: newCustName.trim(),
@@ -620,61 +614,69 @@ export default function App() {
           
           {/* ================= 1. HOME / DASHBOARD SCREEN ================= */}
           {currentTab === 'home' && (
-            <div className="p-4 space-y-4 animate-fadeIn w-full">
+            <div className="p-2 space-y-3 animate-fadeIn w-full">
               
               {/* Timeframe selector tabs */}
-              <div className="flex bg-white rounded-xl p-1 shadow-sm border border-gray-200 text-sm font-medium w-full">
-                <button 
-                  onClick={() => setTimeframe('today')}
-                  className={`flex-1 py-1.5 rounded-lg transition text-center ${timeframe === 'today' ? 'bg-[#113F33] text-white shadow' : 'text-gray-600 hover:bg-gray-100'}`}
-                >
-                  আজ
-                </button>
-                <button 
-                  onClick={() => setTimeframe('week')}
-                  className={`flex-1 py-1.5 rounded-lg transition text-center ${timeframe === 'week' ? 'bg-[#113F33] text-white shadow' : 'text-gray-600 hover:bg-gray-100'}`}
-                >
-                  গত সপ্তাহ
-                </button>
-                <button 
-                  onClick={() => setTimeframe('month')}
-                  className={`flex-1 py-1.5 rounded-lg transition text-center ${timeframe === 'month' ? 'bg-[#113F33] text-white shadow' : 'text-gray-600 hover:bg-gray-100'}`}
-                >
-                  এই মাস
-                </button>
+              <div className="flex bg-white rounded-xl p-0.5 shadow-sm border border-gray-200 text-xs font-bold w-full">
+                {[
+                  { id: 'today', label: 'আজ' },
+                  { id: 'week', label: 'গত সপ্তাহ' },
+                  { id: 'month', label: 'এই মাস' }
+                ].map((tf) => (
+                  <button 
+                    key={tf.id}
+                    onClick={() => setTimeframe(tf.id as 'today' | 'week' | 'month')}
+                    className={`flex-1 py-2 rounded-lg transition text-center ${timeframe === tf.id ? 'bg-[#113F33] text-white shadow' : 'text-gray-600 hover:bg-gray-100'}`}
+                  >
+                    {tf.label}
+                  </button>
+                ))}
               </div>
 
-              {/* Compact Summary Cards */}
-              <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-2 w-full">
+              {/* Compact Summary Cards - Grid */}
+              <div className="grid grid-cols-3 gap-1.5 w-full">
                 {[
-                  { label: 'অর্ডার', val: totalOrdersCount, color: 'text-blue-600' },
-                  { label: 'বিক্রি', val: totalSalesAmount.toLocaleString('en-IN'), color: 'text-emerald-600' },
-                  { label: 'লাভ', val: totalProfitAmount.toLocaleString('en-IN'), color: 'text-teal-600' },
-                  { label: 'গ্রাহক', val: totalCustomersCount, color: 'text-indigo-600' },
-                  { label: 'নতুন', val: newCustomersCount, color: 'text-purple-600' },
-                  { label: 'কমিশন', val: totalRepPayment.toLocaleString('en-IN'), color: 'text-orange-600' },
+                  { label: 'অর্ডার সংখ্যা', val: totalOrdersCount },
+                  { label: 'পুরাতন', val: customers.filter(c=>c.status==='clear').length },
+                  { label: 'নতুন', val: newCustomersCount },
+                  { label: 'বিক্রি', val: totalSalesAmount.toLocaleString('en-IN') },
+                  { label: 'মোট লাভ', val: totalProfitAmount.toLocaleString('en-IN') },
+                  { label: 'প্রতিনিধি', val: totalRepPayment.toLocaleString('en-IN') },
                 ].map((item, i) => (
-                  <div key={i} className="bg-white p-3 rounded-xl shadow-sm border border-gray-100 text-center">
-                    <div className="text-[11px] text-gray-500">{item.label}</div>
-                    <div className={`text-base font-bold ${item.color}`}>{item.val}</div>
+                  <div key={i} className="bg-white p-2 rounded-lg shadow-sm border border-gray-100 text-center">
+                    <div className="text-[10px] text-gray-500 font-medium whitespace-nowrap">{item.label}</div>
+                    <div className="text-sm font-bold text-gray-900 tabular-nums">{item.val}</div>
                   </div>
                 ))}
               </div>
 
-              {/* Compact History List */}
-              <div className="bg-white rounded-2xl shadow-sm border border-gray-200 overflow-hidden w-full">
-                <div className="p-4 bg-gradient-to-r from-gray-50 to-white border-b border-gray-200 font-bold text-sm text-gray-800 flex items-center gap-2">
-                  <Calendar className="w-4 h-4 text-[#113F33]" />
-                  তারিখভিত্তিক ইতিহাস
+              {/* Compact History Table */}
+              <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden w-full text-[10px]">
+                <div className="p-2 bg-gray-50 border-b border-gray-200 font-bold text-gray-800 grid grid-cols-9 gap-1 text-center">
+                  <div className="col-span-1">তারিখ</div>
+                  <div className="col-span-1">অর্ডার</div>
+                  <div className="col-span-1">পুরাতন</div>
+                  <div className="col-span-1">নতুন</div>
+                  <div className="col-span-1">মোট</div>
+                  <div className="col-span-1">বিক্রি</div>
+                  <div className="col-span-1">গ্রাহক<br/>প্রতি</div>
+                  <div className="col-span-1">লাভ</div>
+                  <div className="col-span-1">প্রতিনিধি<br/>পরিশোধ</div>
                 </div>
                 <div className="divide-y divide-gray-100">
-                  {dateHistoryList.slice(0, 10).map((record, index) => (
-                    <div key={index} className="p-4 flex items-center justify-between text-sm hover:bg-gray-50 transition">
-                      <span className="font-bold text-gray-800">{record.date}</span>
-                      <div className="flex gap-4 text-xs font-medium">
-                        <span className="text-emerald-700">বিক্রি: {record.totalSales}৳</span>
-                        <span className="text-teal-700">লাভ: {record.totalProfit}৳</span>
-                      </div>
+                  {dateHistoryList.length === 0 ? (
+                    <div className="p-4 text-center text-xs text-gray-500">কোনো ডাটা পাওয়া যায়নি</div>
+                  ) : dateHistoryList.slice(0, 10).map((r, i) => (
+                    <div key={i} className="p-2 grid grid-cols-9 gap-1 text-center items-center hover:bg-gray-50 tabular-nums">
+                      <div className="col-span-1 font-bold">{r.date.split('-')[0]}</div>
+                      <div className="col-span-1">{r.totalOrders}</div>
+                      <div className="col-span-1">{Math.max(0, r.totalCustomers - r.totalNewCustomers)}</div>
+                      <div className="col-span-1">{r.totalNewCustomers}</div>
+                      <div className="col-span-1">{r.totalCustomers}</div>
+                      <div className="col-span-1">{r.totalSales}</div>
+                      <div className="col-span-1">{(r.totalSales / (r.totalCustomers || 1)).toFixed(0)}</div>
+                      <div className="col-span-1">{r.totalProfit}</div>
+                      <div className="col-span-1">{r.totalRepPayment}</div>
                     </div>
                   ))}
                 </div>
@@ -1414,7 +1416,7 @@ export default function App() {
                   <span>{cartTotal.toLocaleString('en-IN')} ৳</span>
                 </div>
 
-                {posCustomerType !== 'cash' && (
+                {(selectedExistingCustomer !== '' || newCustName !== '') && (
                   <div className="flex justify-between items-center pt-1 border-t border-emerald-200/80">
                     <span className="text-gray-700 font-medium">নগদ গ্রহণ (Paid):</span>
                     <input 

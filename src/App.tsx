@@ -359,6 +359,7 @@ export default function App() {
   const [newProductSell, setNewProductSell] = useState<string>('');
   const [newProductRepName, setNewProductRepName] = useState('');
   const [newProductRepPhone, setNewProductRepPhone] = useState('');
+  const [newProductKeywords, setNewProductKeywords] = useState('');
 
   // Protinidhi Screen State
   const [isAddRepPurchaseOpen, setIsAddRepPurchaseOpen] = useState<boolean>(false);
@@ -396,6 +397,7 @@ export default function App() {
   const [editProdSell, setEditProdSell] = useState('');
   const [editProdRep, setEditProdRep] = useState('');
   const [editProdPhone, setEditProdPhone] = useState('');
+  const [editProdKeywords, setEditProdKeywords] = useState('');
   const [isSubmittingSale, setIsSubmittingSale] = useState(false);
 
   const logActivity = (type: Activity['type'], title: string, description: string, amount: number) => {
@@ -1230,6 +1232,96 @@ export default function App() {
     }
   };
 
+  const autoGenerateProductKeywords = (name: string, category: string, repName?: string): string => {
+    if (!name || !name.trim()) return '';
+    const tokens: string[] = [];
+    const cleanName = name.trim().toLowerCase();
+    
+    tokens.push(cleanName);
+
+    const words = cleanName.split(/[\s\-_()]+/);
+    words.forEach(w => {
+      if (w.length >= 2) tokens.push(w);
+    });
+
+    const dict: { [key: string]: string[] } = {
+      'ডাল': ['dal', 'lentil', 'moshur dal', 'mosur dal', 'masur dal'],
+      'মসুর': ['moshur', 'mosur', 'masur'],
+      'মুগ': ['mug', 'moog'],
+      'অ্যাংকর': ['anchor', 'angkor'],
+      'ছোলা': ['chola', 'chana'],
+      'চাল': ['cal', 'chal', 'rice'],
+      'নাজিরশাইল': ['najirshail'],
+      'বাসমতী': ['basmati'],
+      'মিনিকেট': ['miniket'],
+      'তেল': ['tel', 'oil'],
+      'সয়াবিন': ['soyabean', 'soyabin'],
+      'তীর': ['teer'],
+      'রূপচাঁদা': ['rupchanda', 'roopchanda'],
+      'ফ্রেশ': ['fresh'],
+      'বসুন্ধরা': ['bosundhara', 'basundhara'],
+      'চিনি': ['chini', 'sugar'],
+      'আটা': ['ata', 'atta', 'flour'],
+      'ময়দা': ['maida'],
+      'সুজি': ['suji'],
+      'লবণ': ['lobon', 'salt'],
+      'হলুদ': ['holud', 'turmeric'],
+      'মরিচ': ['morich', 'chilli'],
+      'জিরা': ['jira', 'cumin'],
+      'চা': ['cha', 'tea'],
+      'ডিম': ['dim', 'egg'],
+      'পেঁয়াজ': ['peyaj', 'onion'],
+      'পেয়াজ': ['peyaj', 'onion'],
+      'রসুন': ['rosun', 'garlic'],
+      'আদা': ['ada', 'ginger'],
+      'সাবান': ['saban', 'soap'],
+      'লাইফবয়': ['lifebuoy'],
+      'মেরিল': ['meril'],
+      'ডেটল': ['dettol'],
+      'স্যান্ডালিনা': ['sandalina'],
+      'সিগারেট': ['cigarette', 'sigaret', 'sigarate'],
+      'বেনসন': ['benson'],
+      'গোল্ড': ['gold', 'gold leaf'],
+      'লিফ': ['leaf'],
+      'ডার্বি': ['derby'],
+      'স্টার': ['star'],
+      'পাইলট': ['pilot'],
+      'শ্যাম্পু': ['shampoo'],
+      'বিস্কুট': ['biscuit', 'biskut'],
+      'নুডুলস': ['noodles', 'nuduls'],
+      'পানি': ['pani', 'water']
+    };
+
+    words.forEach(w => {
+      if (dict[w]) {
+        dict[w].forEach(t => tokens.push(t));
+      }
+      Object.keys(dict).forEach(k => {
+        if (w.includes(k)) {
+          dict[k].forEach(t => tokens.push(t));
+        }
+      });
+    });
+
+    if (category && category !== 'সব') {
+      tokens.push(category.toLowerCase());
+    }
+
+    if (repName && repName.trim() && repName !== 'নির্ধারিত নয়') {
+      tokens.push(repName.trim().toLowerCase());
+    }
+
+    const uniqueTokens: string[] = [];
+    tokens.forEach(t => {
+      const trimmed = t.trim();
+      if (trimmed && !uniqueTokens.includes(trimmed)) {
+        uniqueTokens.push(trimmed);
+      }
+    });
+
+    return uniqueTokens.join(', ');
+  };
+
   const matchesProductSearch = (product: Product, query: string) => {
     if (!query.trim()) return true;
     const q = query.toLowerCase().trim();
@@ -1528,13 +1620,13 @@ export default function App() {
                 )}
               </div>
 
-              {/* Category Horizontal Filter */}
-              <div className="flex space-x-1.5 overflow-x-auto p-1 scrollbar-none bg-white rounded-xl border border-gray-100">
+              {/* Category Horizontal Filter - Smooth Horizontal Scrolling */}
+              <div className="flex flex-nowrap space-x-1.5 overflow-x-auto w-full max-w-full touch-pan-x scrollbar-none p-1 bg-white rounded-xl border border-gray-100 shadow-xs">
                 {['সব', ...categoriesList].map(cat => (
                   <button
                     key={cat}
                     onClick={() => setSelectedCategoryFilter(cat)}
-                    className={`px-3 py-1.5 rounded-lg text-[11px] font-bold whitespace-nowrap transition shadow-xs ${
+                    className={`px-3 py-1.5 rounded-lg text-[11px] font-bold whitespace-nowrap shrink-0 transition shadow-xs ${
                       selectedCategoryFilter === cat 
                         ? 'bg-[#113F33] text-white' 
                         : 'bg-gray-50 text-gray-700 hover:bg-emerald-50'
@@ -1655,6 +1747,7 @@ export default function App() {
                         setEditProdSell(String(product.sellPrice));
                         setEditProdRep(product.repName);
                         setEditProdPhone(product.repPhone);
+                        setEditProdKeywords(Array.isArray(product.searchTags) ? product.searchTags.join(', ') : String(product.searchTags || ''));
                         setRestockAmount('');
                       }}
                       className="p-2.5 grid grid-cols-12 gap-1 items-center text-xs hover:bg-emerald-50/30 transition cursor-pointer"
@@ -2285,6 +2378,25 @@ export default function App() {
                   <input type="text" value={newProductRepPhone} onChange={(e) => setNewProductRepPhone(e.target.value)} placeholder="01700000000" className="w-full px-2 py-1.5 bg-gray-50 border border-gray-200 rounded-xl" />
                 </div>
               </div>
+              <div>
+                <div className="flex justify-between items-center mb-0.5">
+                  <label className="text-gray-600 block text-[10px]">সার্চ কিওয়ার্ড (Search Keywords)</label>
+                  <button 
+                    type="button" 
+                    onClick={() => setNewProductKeywords(autoGenerateProductKeywords(newProductName, newProductCategory, newProductRepName))}
+                    className="text-[10px] text-[#1B7A5E] font-bold hover:underline flex items-center gap-0.5"
+                  >
+                    ⚡ অটো কিওয়ার্ড জেনারেট
+                  </button>
+                </div>
+                <input 
+                  type="text" 
+                  value={newProductKeywords} 
+                  onChange={(e) => setNewProductKeywords(e.target.value)} 
+                  placeholder="যেমন: মসুর ডাল, ডাল, moshur dal, dal" 
+                  className="w-full px-3 py-1.5 bg-gray-50 border border-gray-200 rounded-xl text-xs" 
+                />
+              </div>
             </div>
 
             <div className="flex space-x-2 pt-2 border-t border-gray-100">
@@ -2295,6 +2407,11 @@ export default function App() {
                     showToast('দয়া করে পণ্যের নাম দিন', 'error');
                     return;
                   }
+                  const finalKwStr = newProductKeywords.trim() 
+                    ? newProductKeywords 
+                    : autoGenerateProductKeywords(newProductName.trim(), newProductCategory, newProductRepName);
+                  const parsedTags = finalKwStr.split(/[,;\n|]/).map(t => t.trim()).filter(Boolean);
+
                   const newProd: Product = {
                     id: `p-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`,
                     name: newProductName.trim(),
@@ -2306,12 +2423,13 @@ export default function App() {
                     barcode: `${Math.floor(2000 + Math.random() * 9000)}`,
                     repName: newProductRepName.trim() || 'নির্ধারিত নয়',
                     repPhone: newProductRepPhone.trim() || '01700000000',
-                    searchTags: [newProductName.toLowerCase(), newProductCategory, newProductRepName.toLowerCase()]
+                    searchTags: parsedTags.length > 0 ? parsedTags : [newProductName.toLowerCase()]
                   };
                   const updatedProducts = [newProd, ...products];
                   setProducts(updatedProducts);
                   logActivity('new_product', `নতুন পণ্য: ${newProd.name}`, `ক্যাটাগরি: ${newProd.category}, স্টক: ${newProd.stock}`, newProd.buyPrice * newProd.stock);
                   setIsAddProductOpen(false);
+                  setNewProductKeywords('');
                   showToast('পণ্যটি সফলভাবে সংরক্ষিত হয়েছে!', 'success');
                   await handleSync(orders, updatedProducts, customers, categoriesList, unitsList, payments, repTransactions);
                 }}
@@ -2375,12 +2493,36 @@ export default function App() {
                   <input type="text" placeholder="প্রতিনিধি" value={editProdRep} onChange={(e) => setEditProdRep(e.target.value)} className="w-full px-2 py-1.5 bg-gray-50 border border-gray-200 rounded-xl" />
                   <input type="text" placeholder="ফোন" value={editProdPhone} onChange={(e) => setEditProdPhone(e.target.value)} className="w-full px-2 py-1.5 bg-gray-50 border border-gray-200 rounded-xl" />
                 </div>
+                <div>
+                  <div className="flex justify-between items-center mb-0.5">
+                    <label className="text-gray-600 block text-[10px]">সার্চ কিওয়ার্ড (Search Keywords)</label>
+                    <button 
+                      type="button" 
+                      onClick={() => setEditProdKeywords(autoGenerateProductKeywords(editProdName, editProdCategory, editProdRep))}
+                      className="text-[10px] text-[#1B7A5E] font-bold hover:underline flex items-center gap-0.5"
+                    >
+                      ⚡ অটো কিওয়ার্ড জেনারেট
+                    </button>
+                  </div>
+                  <input 
+                    type="text" 
+                    value={editProdKeywords} 
+                    onChange={(e) => setEditProdKeywords(e.target.value)} 
+                    placeholder="যেমন: মসুর ডাল, ডাল, moshur dal" 
+                    className="w-full px-3 py-1.5 bg-gray-50 border border-gray-200 rounded-xl text-xs" 
+                  />
+                </div>
               </div>
             </div>
 
             <div className="flex gap-2 pt-2 border-t border-gray-100">
               <button 
                 onClick={async () => {
+                  const finalKwStr = editProdKeywords.trim() 
+                    ? editProdKeywords 
+                    : autoGenerateProductKeywords(editProdName, editProdCategory, editProdRep);
+                  const parsedTags = finalKwStr.split(/[,;\n|]/).map(t => t.trim()).filter(Boolean);
+
                   const updatedProducts = products.map(p => {
                     if (p.id === editingProduct.id) {
                       return {
@@ -2391,14 +2533,15 @@ export default function App() {
                         buyPrice: Number(editProdBuy) || p.buyPrice,
                         sellPrice: Number(editProdSell) || p.sellPrice,
                         repName: editProdRep,
-                        repPhone: editProdPhone
+                        repPhone: editProdPhone,
+                        searchTags: parsedTags.length > 0 ? parsedTags : [editProdName.toLowerCase()]
                       };
                     }
                     return p;
                   });
                   setProducts(updatedProducts);
                   setEditingProduct(null);
-                  showToast('পণ্যের তথ্য আপডেট হয়েছে', 'success');
+                  showToast('পণ্যের তথ্য ও কিওয়ার্ড আপডেট হয়েছে', 'success');
                   await handleSync(orders, updatedProducts, customers, categoriesList, unitsList, payments, repTransactions);
                 }}
                 className="flex-1 py-2 rounded-xl bg-[#1B7A5E] text-white font-bold text-xs shadow hover:bg-[#113F33]"

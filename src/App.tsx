@@ -491,14 +491,41 @@ export default function App() {
         }
         
         // 2. Bakir Khata / Customers
-        if (result.bakir_khata && Array.isArray(result.bakir_khata) && result.bakir_khata.length > 0) {
-          const fetchedCustomers = result.bakir_khata.map((c: any) => ({
-            ...c,
-            dueAmount: Number(c.dueAmount || c.baki || 0),
-            createdAt: c.createdAt || formatDate(new Date()),
-            lastPurchaseDate: c.lastPurchaseDate || formatDate(new Date())
-          })) as Customer[];
-          setCustomers(uniqueById(fetchedCustomers));
+        if (result.bakir_khata && Array.isArray(result.bakir_khata)) {
+          const fetchedCustomers = result.bakir_khata.map((c: any) => {
+            const name = String(c.name || c['customer name'] || c['customer_name'] || c['ক্রেতার নাম'] || c['নাম'] || '').trim();
+            const phone = String(c.phone || c['customer mobile'] || c['customer_mobile'] || c['মোবাইল'] || c['phone'] || c['mobile'] || '').trim();
+            const address = String(c.address || c['location'] || c['ঠিকানা'] || 'রায়পুর বাজার').trim();
+            const due = Number(c.dueAmount ?? c.due_amount ?? c.due ?? c.baki ?? c['due amount'] ?? c['বাকি'] ?? 0);
+            return {
+              id: String(c.id || `c-${Date.now()}-${Math.random().toString(36).substr(2, 4)}`).trim(),
+              name,
+              phone,
+              address,
+              dueAmount: due,
+              createdAt: c.createdAt || formatDate(new Date()),
+              lastPurchaseDate: c.lastPurchaseDate || formatDate(new Date()),
+              status: (due > 0 ? 'pending' : 'clear') as ('pending' | 'clear')
+            };
+          }).filter((c: Customer) => c.name.length > 0);
+
+          setCustomers(prev => {
+            const customerMap = new Map<string, Customer>();
+            // 1. Keep local customers as source of truth for recent dues/payments
+            prev.forEach(c => customerMap.set(c.name, { ...c }));
+
+            // 2. Append/update with sheet customers (new sheet customers are added below)
+            fetchedCustomers.forEach(fc => {
+              if (!customerMap.has(fc.name)) {
+                customerMap.set(fc.name, fc);
+              } else {
+                const existing = customerMap.get(fc.name)!;
+                if (!existing.phone && fc.phone) existing.phone = fc.phone;
+                if (!existing.address || existing.address === 'রায়পুর বাজার') existing.address = fc.address || existing.address;
+              }
+            });
+            return Array.from(customerMap.values());
+          });
         }
 
         // 3. Joma / Customer Payments
@@ -1203,12 +1230,50 @@ export default function App() {
   const matchesProductSearch = (product: Product, query: string) => {
     if (!query.trim()) return true;
     const q = query.toLowerCase().trim();
-    if (product.name.toLowerCase().includes(q)) return true;
-    if (product.barcode.includes(q)) return true;
-    if (product.category.toLowerCase().includes(q)) return true;
+    const nameLower = product.name.toLowerCase();
+    const catLower = product.category.toLowerCase();
+    
+    // Check direct substring matches
+    if (nameLower.includes(q)) return true;
+    if (catLower.includes(q)) return true;
+    if (product.barcode && product.barcode.toLowerCase().includes(q)) return true;
+    
+    // Check searchTags
     if (product.searchTags && product.searchTags.some(tag => tag.toLowerCase().includes(q))) {
       return true;
     }
+
+    // Prefix matching on words
+    const words = nameLower.split(/\s+/);
+    if (words.some(w => w.startsWith(q))) return true;
+
+    // Common phonetic / prefix mappings for Bengali & English (e.g. d -> ড, dal -> ডাল, tel -> তেল, etc.)
+    const mapEnToBn: { [key: string]: string[] } = {
+      'd': ['ড', 'দ', 'ডাল', 'ডিম', 'ডাব'],
+      'dal': ['ডাল'],
+      'tel': ['তেল'],
+      'ata': ['আটা'],
+      'chini': ['চিনি'],
+      'cha': ['চা'],
+      'dim': ['ডিম'],
+      'alu': ['আলু'],
+      'peyaj': ['পেঁয়াজ', 'পেয়াজ'],
+      'rosun': ['রসুন'],
+      'ada': ['আদা']
+    };
+
+    if (mapEnToBn[q]) {
+      if (mapEnToBn[q].some(bn => nameLower.includes(bn) || catLower.includes(bn))) {
+        return true;
+      }
+    }
+
+    // Character-by-character substring or initial check
+    const qChars = q.split('');
+    if (qChars.every(char => nameLower.includes(char))) {
+      return true;
+    }
+
     return false;
   };
 
@@ -2111,24 +2176,38 @@ export default function App() {
               ))}
             </div>
 
-            <div className="bg-emerald-50/70 p-3 rounded-2xl border border-emerald-200 space-y-1.5 text-xs">
+            <div className="bg-emerald-50/70 p-3 rounded-2xl border border-emerald-200 space-y-2 text-xs">
               <div className="flex justify-between text-gray-700">
                 <span>মোট সাবটোটাল:</span>
                 <span className="font-bold">{cartSubtotal.toLocaleString('en-IN')}</span>
               </div>
               <div className="flex justify-between items-center">
-                <span className="text-gray-700">ছাড়:</span>
+                <span className="text-gray-700">ছাড় (Discount):</span>
                 <input 
                   type="number" 
                   value={discountInput || ''} 
                   onChange={(e) => setDiscountInput(Number(e.target.value))} 
                   placeholder="0" 
-                  className="w-20 px-2 py-1 bg-white border border-gray-200 rounded-lg text-right font-bold text-xs" 
+                  className="w-24 px-2 py-1 bg-white border border-gray-200 rounded-lg text-right font-bold text-xs" 
                 />
               </div>
               <div className="flex justify-between items-center pt-1 border-t border-emerald-200 font-bold text-sm text-[#113F33]">
                 <span>সর্বমোট বিল:</span>
-                <span>{cartTotal.toLocaleString('en-IN')}</span>
+                <span className="text-emerald-900 font-black">{cartTotal.toLocaleString('en-IN')}</span>
+              </div>
+              <div className="flex justify-between items-center pt-1 border-t border-emerald-200">
+                <span className="text-gray-700 font-bold">নগদ প্রদান (Paid):</span>
+                <input 
+                  type="number" 
+                  value={cashPaidInput} 
+                  onChange={(e) => setCashPaidInput(e.target.value)} 
+                  placeholder={String(cartTotal)} 
+                  className="w-24 px-2 py-1 bg-white border border-emerald-300 rounded-lg text-right font-black text-emerald-800 text-xs" 
+                />
+              </div>
+              <div className="flex justify-between text-red-600 font-bold pt-0.5">
+                <span>বাকি (Due):</span>
+                <span>{Math.max(0, cartTotal - (cashPaidInput !== '' ? Number(cashPaidInput) : cartTotal)).toLocaleString('en-IN')}</span>
               </div>
             </div>
 

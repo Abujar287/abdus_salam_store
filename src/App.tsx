@@ -120,6 +120,7 @@ interface Order {
 
 interface Customer {
   id: string;
+  invoiceNo?: string;
   name: string;
   phone: string;
   address: string;
@@ -493,12 +494,14 @@ export default function App() {
         // 2. Bakir Khata / Customers
         if (result.bakir_khata && Array.isArray(result.bakir_khata)) {
           const fetchedCustomers = result.bakir_khata.map((c: any) => {
+            const invoiceNo = String(c.invoiceNo || c['invoiceno'] || c['invoice no'] || c['invoice_no'] || c['ইনভয়েস'] || '').trim();
             const name = String(c.name || c['customer name'] || c['customer_name'] || c['ক্রেতার নাম'] || c['নাম'] || '').trim();
             const phone = String(c.phone || c['customer mobile'] || c['customer_mobile'] || c['মোবাইল'] || c['phone'] || c['mobile'] || '').trim();
             const address = String(c.address || c['location'] || c['ঠিকানা'] || 'রায়পুর বাজার').trim();
             const due = Number(c.dueAmount ?? c.due_amount ?? c.due ?? c.baki ?? c['due amount'] ?? c['বাকি'] ?? 0);
             return {
-              id: String(c.id || `c-${Date.now()}-${Math.random().toString(36).substr(2, 4)}`).trim(),
+              id: String(c.id || `c-${invoiceNo || Date.now()}`).trim(),
+              invoiceNo,
               name,
               phone,
               address,
@@ -867,50 +870,21 @@ export default function App() {
       return p;
     });
 
-    // 2. Update Customer Due
+    // 2. Update Customer Due invoice-wise for bakir khata
     let updatedCustomers = [...customers];
-    if (newCustName.trim()) {
-      const newCustObj: Customer = {
-        id: `c-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`,
-        name: newCustName.trim(),
-        phone: newCustPhone.trim() || '01700000000',
-        address: newCustAddress.trim() || 'রায়পুর বাজার',
+    if (order.due > 0) {
+      const newBakirEntry: Customer = {
+        id: `bakir-${order.invoiceNo}-${Date.now()}`,
+        invoiceNo: order.invoiceNo,
+        name: order.customerName,
+        phone: order.customerPhone,
+        address: newCustAddress.trim() || (customers.find(c => c.name === order.customerName)?.address) || 'রায়পুর বাজার',
         dueAmount: order.due,
         lastPurchaseDate: formatDate(new Date()),
         createdAt: formatDate(new Date()),
-        status: order.due > 0 ? 'pending' : 'clear'
+        status: 'pending'
       };
-      updatedCustomers = [newCustObj, ...updatedCustomers];
-    } else if (order.customerName !== 'নগদ ক্রেতা') {
-      const exists = updatedCustomers.some(c => c.name === order.customerName);
-      if (!exists && order.due > 0) {
-        updatedCustomers = [
-          {
-            id: `c-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`,
-            name: order.customerName,
-            phone: order.customerPhone,
-            address: 'রায়পুর বাজার',
-            dueAmount: order.due,
-            lastPurchaseDate: formatDate(new Date()),
-            createdAt: formatDate(new Date()),
-            status: 'pending'
-          },
-          ...updatedCustomers
-        ];
-      } else {
-        updatedCustomers = updatedCustomers.map(c => {
-          if (c.name === order.customerName) {
-            const newDue = c.dueAmount + order.due;
-            return {
-              ...c,
-              dueAmount: newDue,
-              status: newDue > 0 ? 'pending' : 'clear',
-              lastPurchaseDate: formatDate(new Date())
-            };
-          }
-          return c;
-        });
-      }
+      updatedCustomers = [newBakirEntry, ...updatedCustomers];
     }
 
     // 3. Update orders
@@ -1468,28 +1442,7 @@ export default function App() {
         {currentTab === 'pos' && (
           <div className="p-3 space-y-3 animate-fadeIn w-full pb-6">
             
-            {/* Active Cart & Live Total Bar */}
-            <div className="bg-white p-2.5 rounded-2xl shadow-sm border border-emerald-100 flex items-center justify-between">
-              <div className="flex items-center gap-2.5">
-                <div className="w-8 h-8 rounded-xl bg-emerald-100 text-[#1B7A5E] flex items-center justify-center font-bold">
-                  <ShoppingCart className="w-4 h-4" />
-                </div>
-                <div>
-                  <div className="text-[10px] text-gray-500 font-semibold">কার্ট ({cart.reduce((s, i) => s + i.quantity, 0)} পণ্য)</div>
-                  <div className="text-xs font-black text-gray-900">মোট মূল্য: <span className="text-emerald-700 text-sm font-black tabular-nums">{cartTotal.toLocaleString('en-IN')}</span></div>
-                </div>
-              </div>
-              {cart.length > 0 ? (
-                <button 
-                  onClick={() => setIsCartModalOpen(true)}
-                  className="px-3 py-1.5 bg-[#1B7A5E] hover:bg-[#113F33] text-white rounded-xl text-xs font-bold shadow flex items-center gap-1 transition active:scale-95 animate-pulse"
-                >
-                  বিল দেখুন ({cartTotal.toLocaleString('en-IN')})
-                </button>
-              ) : (
-                <span className="text-[10px] text-gray-400 font-medium">পণ্য যোগ করতে ক্লিক করুন</span>
-              )}
-            </div>
+
 
             {/* Customer Type Selector */}
             <div className="bg-white p-2.5 rounded-2xl shadow-sm border border-emerald-100 space-y-2">
@@ -1851,12 +1804,12 @@ export default function App() {
             </div>
 
             <div className="bg-white rounded-2xl shadow-sm border border-emerald-100 overflow-hidden">
-              <div className="p-2.5 bg-emerald-50/50 border-b border-emerald-100 font-bold text-[10px] text-emerald-900 grid grid-cols-5 gap-1 items-center text-center">
-                <div className="text-left">ক্রেতার নাম</div>
+              <div className="p-2.5 bg-emerald-50/50 border-b border-emerald-100 font-bold text-[10px] text-emerald-900 grid grid-cols-6 gap-1 items-center text-center">
+                <div className="text-left">ইনভয়েস ও নাম</div>
                 <div>মোবাইল</div>
                 <div>ঠিকানা</div>
                 <div>বাকি</div>
-                <div>জমা নিন</div>
+                <div className="col-span-2">জমা নিন (0 বাকি)</div>
               </div>
 
               <div className="divide-y divide-emerald-50 overflow-y-auto">
@@ -1865,20 +1818,24 @@ export default function App() {
                   .filter(c => 
                     c.name.toLowerCase().includes(ledgerSearchQuery.toLowerCase()) || 
                     String(c.phone).includes(ledgerSearchQuery) ||
+                    (c.invoiceNo && c.invoiceNo.toLowerCase().includes(ledgerSearchQuery.toLowerCase())) ||
                     c.address.toLowerCase().includes(ledgerSearchQuery.toLowerCase())
                   )
                   .map(customer => (
-                    <div key={customer.id} className="p-2.5 grid grid-cols-5 gap-1 items-center text-xs border-b border-emerald-50 hover:bg-emerald-50/30 transition text-center">
-                      <div className="text-left font-bold text-gray-900 truncate">{customer.name}</div>
+                    <div key={customer.id} className="p-2.5 grid grid-cols-6 gap-1 items-center text-xs border-b border-emerald-50 hover:bg-emerald-50/30 transition text-center">
+                      <div className="text-left truncate">
+                        <div className="font-bold text-gray-900 truncate">{customer.name}</div>
+                        <div className="text-[9px] text-[#1B7A5E] font-bold">{customer.invoiceNo || 'ইনভয়েস নেই'}</div>
+                      </div>
                       <div className="text-gray-600 truncate text-[11px]">{customer.phone}</div>
                       <div className="text-gray-500 truncate text-[10px]">{customer.address}</div>
                       <div className="font-black text-red-600 tabular-nums">{customer.dueAmount.toLocaleString('en-IN')}</div>
-                      <div className="flex justify-center">
+                      <div className="flex justify-center col-span-2">
                         <button 
                           onClick={() => { setDepositModalCustomer(customer); setDepositAmountInput(String(customer.dueAmount)); }}
                           className="px-2.5 py-1 rounded-lg bg-[#1B7A5E] text-white font-bold text-[10px] shadow-xs active:scale-95 transition hover:bg-[#113F33]"
                         >
-                          জমা
+                          সম্পূর্ণ জমা (0 বাকি)
                         </button>
                       </div>
                     </div>
@@ -2481,9 +2438,8 @@ export default function App() {
                   }
                   
                   const updatedCustomers: Customer[] = customers.map(c => {
-                    if (c.id === depositModalCustomer.id) {
-                      const newDue = Math.max(0, c.dueAmount - amt);
-                      return { ...c, dueAmount: newDue, status: newDue > 0 ? 'pending' : 'clear' };
+                    if (c.id === depositModalCustomer.id || (depositModalCustomer.invoiceNo && c.invoiceNo === depositModalCustomer.invoiceNo)) {
+                      return { ...c, dueAmount: 0, status: 'clear' };
                     }
                     return c;
                   });
@@ -2948,17 +2904,46 @@ function updateSheet(ss, sheetName, data) {
   if (!data || !Array.isArray(data) || data.length === 0) return;
   let sheet = getSheetByNameLoose(ss, sheetName);
   if (!sheet) sheet = ss.insertSheet(sheetName);
-  sheet.clear();
+  const lastRow = sheet.getLastRow();
   const headers = Object.keys(data[0]);
-  sheet.getRange(1, 1, 1, headers.length).setValues([headers]);
-  sheet.getRange(1, 1, 1, headers.length).setFontWeight('bold').setBackground('#E8F5E9');
-  sheet.setFrozenRows(1);
-  const values = data.map(row => headers.map(h => {
-    let val = row[h];
-    if (typeof val === 'object' && val !== null) return JSON.stringify(val);
-    return val;
-  }));
-  sheet.getRange(2, 1, values.length, headers.length).setValues(values);
+  if (lastRow === 0) {
+    sheet.getRange(1, 1, 1, headers.length).setValues([headers]);
+    sheet.getRange(1, 1, 1, headers.length).setFontWeight('bold').setBackground('#E8F5E9');
+    sheet.setFrozenRows(1);
+  }
+  const existingData = sheet.getDataRange().getValues();
+  const existingHeaders = existingData.length > 0 ? existingData[0] : headers;
+  const existingKeys = new Set();
+  let keyColIdx = 0;
+  for (let i = 0; i < existingHeaders.length; i++) {
+    const h = String(existingHeaders[i]).toLowerCase().trim();
+    if (h.includes('invoice') || h === 'id' || h.includes('name')) {
+      keyColIdx = i;
+      break;
+    }
+  }
+  if (existingData.length > 1) {
+    for (let r = 1; r < existingData.length; r++) {
+      existingKeys.add(String(existingData[r][keyColIdx]));
+    }
+  }
+  const newRows = [];
+  data.forEach(row => {
+    const keyValue = String(row[headers[keyColIdx]] || row[headers[0]] || '');
+    const valuesArr = headers.map(h => {
+      let val = row[h];
+      if (typeof val === 'object' && val !== null) return JSON.stringify(val);
+      return val !== undefined ? val : '';
+    });
+    if (!existingKeys.has(keyValue)) {
+      newRows.push(valuesArr);
+      existingKeys.add(keyValue);
+    }
+  });
+  if (newRows.length > 0) {
+    const targetRow = Math.max(2, sheet.getLastRow() + 1);
+    sheet.getRange(targetRow, 1, newRows.length, headers.length).setValues(newRows);
+  }
 }`}</pre>
             </div>
 

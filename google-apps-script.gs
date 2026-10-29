@@ -95,20 +95,15 @@ function doPost(e) {
     const action = data.action;
     
     if (action === 'syncData') {
-      if (data.bikri && data.bikri.length > 0) updateSheet(ss, 'bikri', data.bikri);
-      if (data.stock && data.stock.length > 0) updateSheet(ss, 'stock', data.stock);
-      if (data['bakir khata'] && data['bakir khata'].length > 0) updateSheet(ss, 'bakir khata', data['bakir khata']);
-      if (data.category && data.category.length > 0) updateSheet(ss, 'category', data.category);
-      if (data.units && data.units.length > 0) updateSheet(ss, 'units', data.units);
-      if (data.joma && data.joma.length > 0) updateSheet(ss, 'joma', data.joma);
-      if (data.protinidhi && data.protinidhi.length > 0) updateSheet(ss, 'protinidhi', data.protinidhi);
+      if (data.bikri) updateSheet(ss, 'bikri', data.bikri);
+      if (data.stock) updateSheet(ss, 'stock', data.stock);
+      if (data['bakir khata']) updateSheet(ss, 'bakir khata', data['bakir khata']);
+      if (data.category) updateSheet(ss, 'category', data.category);
+      if (data.units) updateSheet(ss, 'units', data.units);
+      if (data.joma) updateSheet(ss, 'joma', data.joma);
+      if (data.protinidhi) updateSheet(ss, 'protinidhi', data.protinidhi);
       
       return ContentService.createTextOutput(JSON.stringify({ success: true }))
-        .setMimeType(ContentService.MimeType.JSON);
-    }
-
-    if (action === 'setupSheets') {
-      return ContentService.createTextOutput(JSON.stringify({ success: true, message: 'All sheets ensured' }))
         .setMimeType(ContentService.MimeType.JSON);
     }
     
@@ -165,15 +160,24 @@ function getSheetData(ss, sheetName) {
 }
 
 function updateSheet(ss, sheetName, data) {
-  if (!data || !Array.isArray(data) || data.length === 0) {
-    return;
-  }
-
   let sheet = getSheetByNameLoose(ss, sheetName);
   if (!sheet) {
     sheet = ss.insertSheet(sheetName);
   }
-  
+
+  if (!data || !Array.isArray(data)) {
+    return;
+  }
+
+  if (data.length === 0) {
+    sheet.clear();
+    const defaultHeaders = REQUIRED_SHEETS[sheetName] || ['name', 'datetime'];
+    sheet.getRange(1, 1, 1, defaultHeaders.length).setValues([defaultHeaders]);
+    sheet.getRange(1, 1, 1, defaultHeaders.length).setFontWeight('bold').setBackground('#E8F5E9');
+    sheet.setFrozenRows(1);
+    return;
+  }
+
   sheet.clear();
   
   const headers = Object.keys(data[0]);

@@ -46,7 +46,8 @@ import {
   Receipt,
   Truck,
   Building2,
-  Users
+  Users,
+  Pencil
 } from 'lucide-react';
 import { 
   isWithinInterval, 
@@ -151,6 +152,7 @@ interface DateHistoryRecord {
   totalTotalCustomers: number;
   totalProfit: number;
   totalRepPayment: number;
+  totalRemaining: number;
 }
 
 interface PaymentRecord {
@@ -257,7 +259,7 @@ export default function App() {
 
   // Navigation & Filter States
   const [currentTab, setCurrentTab] = useState<'home' | 'pos' | 'stock' | 'protinidhi' | 'ledger' | 'activity' | 'more'>('home');
-  const [timeframe, setTimeframe] = useState<'all' | 'today' | 'week' | 'month' | 'more'>('all');
+  const [timeframe, setTimeframe] = useState<'today' | 'week' | 'month' | 'all' | 'more'>('today');
   const [customStartDate, setCustomStartDate] = useState<string>('');
   const [customEndDate, setCustomEndDate] = useState<string>('');
 
@@ -381,6 +383,8 @@ export default function App() {
   const [isCategoryModalOpen, setIsCategoryModalOpen] = useState<boolean>(false);
   const [newCatInput, setNewCatInput] = useState('');
   const [newUnitInput, setNewUnitInput] = useState('');
+  const [editingCategory, setEditingCategory] = useState<{ original: string; current: string } | null>(null);
+  const [editingUnit, setEditingUnit] = useState<{ original: string; current: string } | null>(null);
 
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
   const [restockAmount, setRestockAmount] = useState<string>('');
@@ -423,7 +427,14 @@ export default function App() {
 
   // LIVE FETCH FROM GOOGLE SHEET
   const isFetchingRef = useRef(false);
+  const isPushingRef = useRef(false);
+  const lastPushTimestampRef = useRef(0);
+
   const fetchData = async () => {
+    // If a push was recently made or is in progress, pause fetch to avoid overwriting uncommitted data
+    if (isPushingRef.current || (Date.now() - lastPushTimestampRef.current < 4000)) {
+      return;
+    }
     if (isFetchingRef.current) return;
     isFetchingRef.current = true;
     setIsSyncing(true);
@@ -434,28 +445,49 @@ export default function App() {
       });
       const result = await response.json();
       
+      // If a push started while fetch was in flight, abort applying stale sheet data
+      if (isPushingRef.current || (Date.now() - lastPushTimestampRef.current < 4000)) {
+        return;
+      }
+
       if (result && result.success) {
         // 1. Stock / Products
-        if (result.stock && Array.isArray(result.stock) && result.stock.length > 0) {
-          const fetchedProducts = result.stock.map((p: any) => ({
-            ...p,
-            stock: Number(p.stock) || 0,
-            buyPrice: Number(p.buyPrice) || 0,
-            sellPrice: Number(p.sellPrice) || 0,
-            piecesPerPacket: p.piecesPerPacket ? Number(p.piecesPerPacket) : undefined,
-            stickPrice: p.stickPrice ? Number(p.stickPrice) : undefined,
-            searchTags: Array.isArray(p.searchTags) ? p.searchTags : [String(p.name || '').toLowerCase()]
-          }));
-          setProducts(uniqueById(fetchedProducts));
+        if (result.stock && Array.isArray(result.stock)) {
+          const fetchedProducts = result.stock.map((p: any) => {
+            let tags: string[] = [];
+            const rawTags = p.searchTags || p.searchtags;
+            if (Array.isArray(rawTags)) {
+              tags = rawTags;
+            } else if (typeof rawTags === 'string') {
+              try { tags = JSON.parse(rawTags); } catch { tags = [rawTags]; }
+            }
+            return {
+              id: String(p.id || `p-${Date.now()}-${Math.random().toString(36).substr(2, 4)}`).trim(),
+              name: String(p.name || '').trim(),
+              category: String(p.category || 'মুদি').trim(),
+              stock: Number(p.stock) || 0,
+              unit: String(p.unit || 'পিস').trim(),
+              buyPrice: Number(p.buyPrice ?? p.buyprice ?? p['buy price'] ?? 0),
+              sellPrice: Number(p.sellPrice ?? p.sellprice ?? p['sell price'] ?? 0),
+              barcode: String(p.barcode || '').trim(),
+              repName: String(p.repName || p.repname || p['rep name'] || '').trim(),
+              repPhone: String(p.repPhone || p.repphone || p['rep phone'] || '').trim(),
+              piecesPerPacket: p.piecesPerPacket ? Number(p.piecesPerPacket) : undefined,
+              stickPrice: p.stickPrice ? Number(p.stickPrice) : undefined,
+              searchTags: tags.length > 0 ? tags : [String(p.name || '').toLowerCase()]
+            };
+          }).filter((p: Product) => p.name.length > 0);
 
-          const autoCats = fetchedProducts.map((p: any) => p.category).filter(Boolean);
-          if (autoCats.length > 0) {
-            setCategoriesList(prev => Array.from(new Set([...prev, ...autoCats])));
-          }
-          const autoUnits = fetchedProducts.map((p: any) => p.unit).filter(Boolean);
-          if (autoUnits.length > 0) {
-            setUnitsList(prev => Array.from(new Set([...prev, ...autoUnits])));
-          }
+          setProducts(prev => {
+            const fetchedMap = new Map(fetchedProducts.map(fp => [fp.id, fp]));
+            const merged = [...fetchedProducts];
+            prev.forEach(lp => {
+              if (!fetchedMap.has(lp.id)) {
+                merged.push(lp);
+              }
+            });
+            return merged;
+          });
         }
         
         // 2. Bakir Khata / Customers
@@ -478,7 +510,7 @@ export default function App() {
           setPayments(uniqueById(fetchedPayments));
         }
 
-        // 4. Categories & Units
+        // 4. Categories & Units (Direct sync from Google Sheet)
         const extractStringVal = (item: any): string => {
           if (!item) return '';
           if (typeof item === 'string') return item.trim();
@@ -494,7 +526,7 @@ export default function App() {
             .map(extractStringVal)
             .filter((c: string) => c && c.length > 0);
           if (cats.length > 0) {
-            setCategoriesList(prev => Array.from(new Set([...prev, ...cats])));
+            setCategoriesList(cats);
           }
         }
         
@@ -503,7 +535,7 @@ export default function App() {
             .map(extractStringVal)
             .filter((u: string) => u && u.length > 0);
           if (units.length > 0) {
-            setUnitsList(prev => Array.from(new Set([...prev, ...units])));
+            setUnitsList(units);
           }
         }
 
@@ -608,7 +640,8 @@ export default function App() {
     targetPayments = payments,
     targetReps = repTransactions
   ) => {
-    if (isSyncing) return;
+    isPushingRef.current = true;
+    lastPushTimestampRef.current = Date.now();
     setIsSyncing(true);
     try {
       const formattedBikri = targetOrders.map(o => {
@@ -643,26 +676,26 @@ export default function App() {
         };
       });
 
-      const mergedCategories = Array.from(new Set([
-        ...targetCategories,
-        ...targetProducts.map(p => p.category).filter(Boolean),
-        'মুদি', 'সিগারেট', 'কসমেটিকস', 'অন্যান্য'
-      ])).filter(Boolean);
-
-      const mergedUnits = Array.from(new Set([
-        ...targetUnits,
-        ...targetProducts.map(p => p.unit).filter(Boolean),
-        'কেজি', 'প্যাকেট', 'পিস', 'বোতল', 'লিটার'
-      ])).filter(Boolean);
-
       const payload = {
         action: 'syncData',
         tabs: ['bikri', 'stock', 'bakir khata', 'category', 'units', 'joma', 'protinidhi'],
         bikri: formattedBikri,
-        stock: targetProducts.map(p => ({ ...p, datetime: formatDateTime(new Date()) })),
+        stock: targetProducts.map(p => ({
+          id: String(p.id || '').trim(),
+          name: String(p.name || '').trim(),
+          category: String(p.category || 'মুদি').trim(),
+          stock: Number(p.stock) || 0,
+          unit: String(p.unit || 'পিস').trim(),
+          buyPrice: Number(p.buyPrice) || 0,
+          sellPrice: Number(p.sellPrice) || 0,
+          barcode: String(p.barcode || '').trim(),
+          repName: String(p.repName || '').trim(),
+          repPhone: String(p.repPhone || '').trim(),
+          datetime: formatDateTime(new Date())
+        })),
         'bakir khata': targetCustomers.map(c => ({ ...c, datetime: formatDateTime(new Date()) })),
-        category: mergedCategories.map(cat => ({ category_name: cat, datetime: formatDateTime(new Date()) })),
-        units: mergedUnits.map(u => ({ unit_name: u, datetime: formatDateTime(new Date()) })),
+        category: targetCategories.map(cat => ({ category_name: cat, datetime: formatDateTime(new Date()) })),
+        units: targetUnits.map(u => ({ unit_name: u, datetime: formatDateTime(new Date()) })),
         joma: targetPayments.map(p => ({ ...p, datetime: formatDateTime(new Date()) })),
         protinidhi: targetReps.map(r => ({
           id: r.id,
@@ -684,11 +717,13 @@ export default function App() {
         headers: { 'Content-Type': 'text/plain' },
         body: JSON.stringify(payload)
       });
+      lastPushTimestampRef.current = Date.now();
       return true;
     } catch (err) {
       console.error("Sync error:", err);
       return false;
     } finally {
+      isPushingRef.current = false;
       setIsSyncing(false);
       setSyncTime(getSyncDisplayTime(new Date()));
     }
@@ -897,8 +932,8 @@ export default function App() {
 
     const updated = [newRec, ...repTransactions];
     setRepTransactions(updated);
-    logActivity('stock_in', `কোম্পানি ক্রয়: ${newRec.repName}`, `${newRec.productName} - ${amt} ৳`, amt);
-    showToast(`সফলভাবে ${amt} ৳ কোম্পানি ক্রয় সংরক্ষিত হয়েছে!`, 'success');
+    logActivity('stock_in', `কোম্পানি ক্রয়: ${newRec.repName}`, `${newRec.productName} - ${amt}`, amt);
+    showToast(`সফলভাবে ${amt} কোম্পানি ক্রয় সংরক্ষিত হয়েছে!`, 'success');
 
     setIsAddRepPurchaseOpen(false);
     setNewRepName('');
@@ -1002,7 +1037,8 @@ export default function App() {
         totalNewCustomers: 0,
         totalTotalCustomers: 0,
         totalProfit: 0,
-        totalRepPayment: 0
+        totalRepPayment: 0,
+        totalRemaining: 0
       };
     }
     
@@ -1032,10 +1068,16 @@ export default function App() {
         totalNewCustomers: 0,
         totalTotalCustomers: 0,
         totalProfit: 0,
-        totalRepPayment: 0
+        totalRepPayment: 0,
+        totalRemaining: 0
       };
     }
     dateHistoryMap[dKey].totalRepPayment += (Number(r.amount) || 0);
+  });
+
+  // Calculate অবশিষ্ট (বিক্রি - প্রতিনিধি পরিশোধ) for each date
+  Object.values(dateHistoryMap).forEach(rec => {
+    rec.totalRemaining = rec.totalSales - rec.totalRepPayment;
   });
 
   const dateHistoryList = Object.values(dateHistoryMap).sort((a, b) => {
@@ -1067,7 +1109,7 @@ export default function App() {
       zip.file('Bikri_Sales_Report.csv', salesCsv);
 
       // 2. Daily Summary CSV
-      const summaryHeader = ['তারিখ', 'মোট অর্ডার', 'পুরাতন ক্রেতা', 'নতুন ক্রেতা (নগদ)', 'মোট ক্রেতা', 'মোট বিক্রি (৳)', 'মোট লাভ (৳)', 'প্রতিনিধি পরিশোধ (৳)'];
+      const summaryHeader = ['তারিখ', 'মোট অর্ডার', 'পুরাতন ক্রেতা', 'নতুন ক্রেতা (নগদ)', 'মোট ক্রেতা', 'মোট বিক্রি', 'মোট লাভ', 'প্রতিনিধি পরিশোধ', 'অবশিষ্ট'];
       const summaryRows = dateHistoryList.map(r => [
         `"${r.date}"`,
         r.totalOrders,
@@ -1076,13 +1118,14 @@ export default function App() {
         r.totalTotalCustomers,
         r.totalSales,
         r.totalProfit,
-        r.totalRepPayment
+        r.totalRepPayment,
+        (r.totalSales - r.totalRepPayment)
       ]);
       const summaryCsv = '\uFEFF' + [summaryHeader.join(','), ...summaryRows.map(r => r.join(','))].join('\n');
       zip.file('Daily_Summary_Report.csv', summaryCsv);
 
       // 3. Stock CSV
-      const stockHeader = ['পণ্যের নাম', 'ক্যাটাগরি', 'স্টক পরিমাণ', 'একক', 'ক্রয় মূল্য (৳)', 'বিক্রয় মূল্য (৳)', 'প্রতিনিধির নাম', 'প্রতিনিধির ফোন'];
+      const stockHeader = ['পণ্যের নাম', 'ক্যাটাগরি', 'স্টক পরিমাণ', 'একক', 'ক্রয় মূল্য', 'বিক্রয় মূল্য', 'প্রতিনিধির নাম', 'প্রতিনিধির ফোন'];
       const stockRows = products.map(p => [
         `"${p.name.replace(/"/g, '""')}"`,
         `"${p.category}"`,
@@ -1097,7 +1140,7 @@ export default function App() {
       zip.file('Stock_Inventory_Report.csv', stockCsv);
 
       // 4. Protinidhi CSV
-      const repHeader = ['তারিখ', 'প্রতিনিধি / কোম্পানি', 'মোবাইল', 'পণ্য', 'ক্রয় মূল্য (৳)', 'পেমেন্ট মাধ্যম', 'মেমো'];
+      const repHeader = ['তারিখ', 'প্রতিনিধি / কোম্পানি', 'মোবাইল', 'পণ্য', 'ক্রয় মূল্য', 'পেমেন্ট মাধ্যম', 'মেমো'];
       const repRows = repTransactions.map(r => [
         `"${r.date}"`,
         `"${r.repName.replace(/"/g, '""')}"`,
@@ -1236,18 +1279,18 @@ export default function App() {
         {currentTab === 'home' && (
           <div className="p-3 space-y-3 animate-fadeIn w-full pb-6">
             
-            {/* Timeframe Selector Tabs (Extra sync button removed as requested) */}
-            <div className="flex bg-white rounded-xl p-0.5 shadow-sm border border-emerald-100 text-xs font-bold w-full bg-emerald-50/30">
+            {/* Timeframe Selector Tabs */}
+            <div className="flex bg-white rounded-xl p-0.5 shadow-sm border border-emerald-200 text-xs font-bold w-full bg-emerald-50/30">
               {[
-                { id: 'all', label: 'সব' },
                 { id: 'today', label: 'আজ' },
                 { id: 'week', label: 'গত সপ্তাহ' },
                 { id: 'month', label: 'এই মাস' },
+                { id: 'all', label: 'সব' },
                 { id: 'more', label: 'তারিখ' }
               ].map((tf) => (
                 <button 
                   key={tf.id}
-                  onClick={() => setTimeframe(tf.id as 'all' | 'today' | 'week' | 'month' | 'more')}
+                  onClick={() => setTimeframe(tf.id as 'today' | 'week' | 'month' | 'all' | 'more')}
                   className={`flex-1 py-2 rounded-lg transition text-center ${timeframe === tf.id ? 'bg-[#113F33] text-white shadow' : 'text-gray-600 hover:bg-emerald-100'}`}
                 >
                   {tf.label}
@@ -1256,7 +1299,7 @@ export default function App() {
             </div>
 
             {timeframe === 'more' && (
-              <div className="bg-white p-2.5 rounded-xl shadow-sm border border-emerald-100 flex gap-2 text-xs">
+              <div className="bg-white p-2.5 rounded-xl shadow-sm border border-emerald-200 flex gap-2 text-xs">
                 <div className="flex-1">
                   <label className="text-[10px] text-gray-500 block mb-0.5">হতে</label>
                   <input 
@@ -1278,19 +1321,28 @@ export default function App() {
               </div>
             )}
 
-            {/* Compact Summary Cards - Grid */}
-            <div className="grid grid-cols-3 gap-1.5 w-full">
+            {/* Compact Summary Cards - Aligned Grid */}
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 w-full">
               {[
-                { label: 'অর্ডার সংখ্যা', val: totalOrdersCount },
-                { label: 'পুরাতন ক্রেতা', val: oldCustomersCount },
-                { label: 'নতুন ক্রেতা', val: newCustomersCount },
-                { label: 'বিক্রি (৳)', val: totalSalesAmount.toLocaleString('en-IN') },
-                { label: 'মোট লাভ (৳)', val: totalProfitAmount.toLocaleString('en-IN') },
-                { label: 'প্রতিনিধি পরিশোধ', val: totalRepPayment.toLocaleString('en-IN') },
+                { label: 'অর্ডার সংখ্যা', val: totalOrdersCount, highlight: false },
+                { label: 'পুরাতন ক্রেতা', val: oldCustomersCount, highlight: false },
+                { label: 'নতুন ক্রেতা', val: newCustomersCount, highlight: false },
+                { label: 'মোট ক্রেতা', val: oldCustomersCount + newCustomersCount, highlight: false },
+                { label: 'বিক্রি', val: totalSalesAmount.toLocaleString('en-IN'), highlight: false },
+                { label: 'মোট লাভ', val: totalProfitAmount.toLocaleString('en-IN'), highlight: false },
+                { label: 'প্রতিনিধি পরিশোধ', val: totalRepPayment.toLocaleString('en-IN'), highlight: false },
+                { label: 'অবশিষ্ট', val: (totalSalesAmount - totalRepPayment).toLocaleString('en-IN'), highlight: true },
               ].map((item, i) => (
-                <div key={i} className="bg-white p-2.5 rounded-xl shadow-sm border border-emerald-100 text-center hover:bg-emerald-50/30 transition">
+                <div 
+                  key={i} 
+                  className={`p-2.5 rounded-xl shadow-sm border text-center transition ${
+                    item.highlight 
+                      ? 'bg-emerald-50 border-emerald-300' 
+                      : 'bg-white border-emerald-200 hover:bg-emerald-50/30'
+                  }`}
+                >
                   <div className="text-[10px] text-gray-500 font-medium whitespace-nowrap">{item.label}</div>
-                  <div className="text-sm font-bold text-gray-900 tabular-nums">{item.val}</div>
+                  <div className={`text-sm font-bold tabular-nums ${item.highlight ? 'text-emerald-900 font-black text-base' : 'text-gray-900'}`}>{item.val}</div>
                 </div>
               ))}
             </div>
@@ -1307,13 +1359,14 @@ export default function App() {
                     <th className="border-r border-emerald-100 py-2.5 px-1 text-center">মোট<br/>ক্রেতা</th>
                     <th className="border-r border-emerald-100 py-2.5 px-1.5 text-center">বিক্রি</th>
                     <th className="border-r border-emerald-100 py-2.5 px-1 text-center">লাভ</th>
-                    <th className="py-2.5 px-1.5 text-center">প্রতিনিধি<br/>পরিশোধ</th>
+                    <th className="border-r border-emerald-100 py-2.5 px-1 text-center">প্রতিনিধি<br/>পরিশোধ</th>
+                    <th className="py-2.5 px-1.5 text-center text-emerald-900 font-black">অবশিষ্ট</th>
                   </tr>
                 </thead>
                 <tbody className="bg-white divide-y divide-emerald-50">
                   {dateHistoryList.length === 0 ? (
                     <tr>
-                      <td colSpan={8} className="p-8 text-center text-xs text-gray-400 italic">গুগল শিট থেকে ডাটা লোড হচ্ছে...</td>
+                      <td colSpan={9} className="p-8 text-center text-xs text-gray-400 italic">গুগল শিট থেকে ডাটা লোড হচ্ছে...</td>
                     </tr>
                   ) : dateHistoryList.slice(0, 30).map((r, i) => (
                     <tr key={i} className="text-center items-center hover:bg-emerald-50/40 tabular-nums">
@@ -1324,7 +1377,8 @@ export default function App() {
                       <td className="border-r border-emerald-50 py-2 font-bold">{r.totalTotalCustomers}</td>
                       <td className="border-r border-emerald-50 py-2 font-black text-gray-900">{r.totalSales.toLocaleString('en-IN')}</td>
                       <td className="border-r border-emerald-50 py-2 font-black text-emerald-700">{r.totalProfit.toLocaleString('en-IN')}</td>
-                      <td className="py-2 text-gray-700 font-medium">{r.totalRepPayment.toLocaleString('en-IN')}</td>
+                      <td className="border-r border-emerald-50 py-2 text-gray-700 font-medium">{r.totalRepPayment.toLocaleString('en-IN')}</td>
+                      <td className="py-2 font-black text-emerald-800 tabular-nums">{(r.totalSales - r.totalRepPayment).toLocaleString('en-IN')}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -1338,6 +1392,29 @@ export default function App() {
         {currentTab === 'pos' && (
           <div className="p-3 space-y-3 animate-fadeIn w-full pb-6">
             
+            {/* Active Cart & Live Total Bar */}
+            <div className="bg-white p-2.5 rounded-2xl shadow-sm border border-emerald-100 flex items-center justify-between">
+              <div className="flex items-center gap-2.5">
+                <div className="w-8 h-8 rounded-xl bg-emerald-100 text-[#1B7A5E] flex items-center justify-center font-bold">
+                  <ShoppingCart className="w-4 h-4" />
+                </div>
+                <div>
+                  <div className="text-[10px] text-gray-500 font-semibold">কার্ট ({cart.reduce((s, i) => s + i.quantity, 0)} পণ্য)</div>
+                  <div className="text-xs font-black text-gray-900">মোট মূল্য: <span className="text-emerald-700 text-sm font-black tabular-nums">{cartTotal.toLocaleString('en-IN')}</span></div>
+                </div>
+              </div>
+              {cart.length > 0 ? (
+                <button 
+                  onClick={() => setIsCartModalOpen(true)}
+                  className="px-3 py-1.5 bg-[#1B7A5E] hover:bg-[#113F33] text-white rounded-xl text-xs font-bold shadow flex items-center gap-1 transition active:scale-95 animate-pulse"
+                >
+                  বিল দেখুন ({cartTotal.toLocaleString('en-IN')})
+                </button>
+              ) : (
+                <span className="text-[10px] text-gray-400 font-medium">পণ্য যোগ করতে ক্লিক করুন</span>
+              )}
+            </div>
+
             {/* Customer Type Selector */}
             <div className="bg-white p-2.5 rounded-2xl shadow-sm border border-emerald-100 space-y-2">
               <div className="flex bg-gray-100 rounded-xl p-0.5">
@@ -1355,7 +1432,7 @@ export default function App() {
                   >
                     <option value="">-- বাকি খাতার ক্রেতা সিলেক্ট করুন --</option>
                     {customers.map(c => (
-                      <option key={c.id} value={c.name}>{c.name} - {c.phone} (বকেয়া: {c.dueAmount} ৳)</option>
+                      <option key={c.id} value={c.name}>{c.name} - {c.phone} (বকেয়া: {c.dueAmount})</option>
                     ))}
                   </select>
                 </div>
@@ -1390,7 +1467,7 @@ export default function App() {
 
               {/* Category Horizontal Filter */}
               <div className="flex space-x-1.5 overflow-x-auto p-1 scrollbar-none bg-white rounded-xl border border-gray-100">
-                {['সব', ...Array.from(new Set([...categoriesList, ...products.map(p => p.category).filter(Boolean)]))].map(cat => (
+                {['সব', ...categoriesList].map(cat => (
                   <button
                     key={cat}
                     onClick={() => setSelectedCategoryFilter(cat)}
@@ -1430,9 +1507,12 @@ export default function App() {
                       </div>
 
                       <div className="flex items-center justify-between mt-2 pt-1.5 border-t border-gray-100">
-                        <span className="font-black text-xs text-[#113F33]">{product.sellPrice} ৳</span>
-                        <div className="w-5 h-5 rounded-md bg-[#1B7A5E] text-white flex items-center justify-center shadow-xs">
-                          <Plus className="w-3 h-3" />
+                        <div>
+                          <span className="text-[9px] text-gray-400 block font-medium">মূল্য</span>
+                          <span className="font-black text-sm text-[#113F33] tabular-nums">{product.sellPrice}</span>
+                        </div>
+                        <div className="w-6 h-6 rounded-lg bg-[#1B7A5E] text-white flex items-center justify-center shadow-xs group-hover:bg-[#113F33] transition">
+                          <Plus className="w-3.5 h-3.5" />
                         </div>
                       </div>
                     </div>
@@ -1447,7 +1527,7 @@ export default function App() {
                 className="fixed bottom-20 right-4 z-40 bg-[#1B7A5E] hover:bg-[#113F33] text-white py-2.5 px-4 rounded-2xl font-bold shadow-2xl flex items-center gap-2 border-2 border-amber-400 transition hover:scale-105 animate-pulse"
               >
                 <ShoppingCart className="w-5 h-5" />
-                <span className="text-xs">{cart.reduce((s, i) => s + i.quantity, 0)} পণ্য | {cartTotal} ৳</span>
+                <span className="text-xs">{cart.reduce((s, i) => s + i.quantity, 0)} পণ্য | {cartTotal.toLocaleString('en-IN')}</span>
               </button>
             )}
 
@@ -1528,7 +1608,7 @@ export default function App() {
                         </span>
                       </div>
                       <div className="col-span-4 text-right">
-                        <div className="font-bold text-gray-900">{product.sellPrice} ৳</div>
+                        <div className="font-bold text-gray-900">{product.sellPrice}</div>
                         <div className="text-[9px] text-gray-400">ক্রয়: {product.buyPrice} | {product.repName || '-'}</div>
                       </div>
                     </div>
@@ -1564,13 +1644,13 @@ export default function App() {
               <div className="bg-white p-2.5 rounded-xl border border-emerald-100 shadow-sm text-center">
                 <div className="text-[10px] text-gray-500 font-medium">মোট কোম্পানি খরচ</div>
                 <div className="text-sm font-black text-gray-900 tabular-nums">
-                  {repTransactions.reduce((s, r) => s + (Number(r.amount) || 0), 0).toLocaleString('en-IN')} ৳
+                  {repTransactions.reduce((s, r) => s + (Number(r.amount) || 0), 0).toLocaleString('en-IN')}
                 </div>
               </div>
               <div className="bg-white p-2.5 rounded-xl border border-emerald-100 shadow-sm text-center">
                 <div className="text-[10px] text-gray-500 font-medium">আজকের কেনা</div>
                 <div className="text-sm font-black text-emerald-700 tabular-nums">
-                  {repTransactions.filter(r => normalizeDate(r.date || r.rawDate) === normalizeDate(new Date())).reduce((s, r) => s + (Number(r.amount) || 0), 0).toLocaleString('en-IN')} ৳
+                  {repTransactions.filter(r => normalizeDate(r.date || r.rawDate) === normalizeDate(new Date())).reduce((s, r) => s + (Number(r.amount) || 0), 0).toLocaleString('en-IN')}
                 </div>
               </div>
               <div className="bg-white p-2.5 rounded-xl border border-emerald-100 shadow-sm text-center">
@@ -1613,7 +1693,7 @@ export default function App() {
                       <div>
                         <div className="font-bold text-xs text-gray-900">{repName}</div>
                         <div className="text-[10px] text-gray-500">{phone}</div>
-                        <div className="text-[9px] text-emerald-800 font-semibold mt-0.5">মোট ক্রয়: {repTotal.toLocaleString('en-IN')} ৳</div>
+                        <div className="text-[9px] text-emerald-800 font-semibold mt-0.5">মোট ক্রয়: {repTotal.toLocaleString('en-IN')}</div>
                       </div>
                       <div className="flex gap-1.5">
                         <a 
@@ -1667,7 +1747,7 @@ export default function App() {
                         </div>
                         <div className="text-right">
                           <div className="font-black text-sm text-gray-900 tabular-nums">
-                            {tx.amount.toLocaleString('en-IN')} ৳
+                            {tx.amount.toLocaleString('en-IN')}
                           </div>
                           <div className="text-[9px] text-emerald-700 font-bold">পরিশোধিত</div>
                         </div>
@@ -1686,7 +1766,7 @@ export default function App() {
             <div className="relative">
               <Search className="w-4 h-4 text-gray-400 absolute left-3 top-2.5" />
               <input 
-                type="text"
+                type="text" 
                 placeholder="ক্রেতার নাম বা মোবাইল নম্বর দিয়ে খুঁজুন..."
                 value={ledgerSearchQuery}
                 onChange={(e) => setLedgerSearchQuery(e.target.value)}
@@ -1699,7 +1779,7 @@ export default function App() {
                 <div className="text-left">ক্রেতার নাম</div>
                 <div>মোবাইল</div>
                 <div>ঠিকানা</div>
-                <div>বাকি (৳)</div>
+                <div>বাকি</div>
                 <div>জমা নিন</div>
               </div>
 
@@ -1956,7 +2036,7 @@ export default function App() {
 
               <div className="grid grid-cols-2 gap-2">
                 <div>
-                  <label className="text-gray-600 font-medium block mb-1">পরিশোধিত টাকা (৳)</label>
+                  <label className="text-gray-600 font-medium block mb-1">পরিশোধিত টাকা</label>
                   <input 
                     type="number" 
                     value={newRepAmount}
@@ -2018,7 +2098,7 @@ export default function App() {
                   <div className="min-w-0 flex-1 mr-2">
                     <div className="font-bold text-gray-900 truncate">{item.product.name}</div>
                     <div className="text-[10px] text-gray-500">
-                      দর: {item.product.sellPrice} × {item.quantity} = {item.product.sellPrice * item.quantity} ৳
+                      দর: {item.product.sellPrice} × {item.quantity} = {item.product.sellPrice * item.quantity}
                     </div>
                   </div>
                   <div className="flex items-center space-x-1.5 flex-shrink-0">
@@ -2034,10 +2114,10 @@ export default function App() {
             <div className="bg-emerald-50/70 p-3 rounded-2xl border border-emerald-200 space-y-1.5 text-xs">
               <div className="flex justify-between text-gray-700">
                 <span>মোট সাবটোটাল:</span>
-                <span className="font-bold">{cartSubtotal.toLocaleString('en-IN')} ৳</span>
+                <span className="font-bold">{cartSubtotal.toLocaleString('en-IN')}</span>
               </div>
               <div className="flex justify-between items-center">
-                <span className="text-gray-700">ছাড় (৳):</span>
+                <span className="text-gray-700">ছাড়:</span>
                 <input 
                   type="number" 
                   value={discountInput || ''} 
@@ -2048,7 +2128,7 @@ export default function App() {
               </div>
               <div className="flex justify-between items-center pt-1 border-t border-emerald-200 font-bold text-sm text-[#113F33]">
                 <span>সর্বমোট বিল:</span>
-                <span>{cartTotal.toLocaleString('en-IN')} ৳</span>
+                <span>{cartTotal.toLocaleString('en-IN')}</span>
               </div>
             </div>
 
@@ -2276,7 +2356,7 @@ export default function App() {
 
             <div className="bg-gray-50 p-2.5 rounded-xl text-xs space-y-1 border border-gray-200">
               <div className="font-bold text-gray-900">{depositModalCustomer.name} ({depositModalCustomer.phone})</div>
-              <div className="text-red-600 font-bold">বর্তমান বকেয়া: {depositModalCustomer.dueAmount.toLocaleString('en-IN')} ৳</div>
+              <div className="text-red-600 font-bold">বর্তমান বকেয়া: {depositModalCustomer.dueAmount.toLocaleString('en-IN')}</div>
             </div>
 
             <div className="space-y-2 text-xs">
@@ -2332,8 +2412,8 @@ export default function App() {
                   setCustomers(updatedCustomers);
                   setPayments(updatedPayments);
                   
-                  logActivity('payment', `টাকা জমা: ${depositModalCustomer.name}`, `${amt} ৳ (${depositMethod}) জমা গ্রহণ`, amt);
-                  showToast(`সফলভাবে ${amt} ৳ জমা গ্রহণ করা হয়েছে।`, 'success');
+                  logActivity('payment', `টাকা জমা: ${depositModalCustomer.name}`, `${amt} (${depositMethod}) জমা গ্রহণ`, amt);
+                  showToast(`সফলভাবে ${amt} জমা গ্রহণ করা হয়েছে।`, 'success');
                   
                   setDepositModalCustomer(null);
                   setDepositAmountInput('');
@@ -2388,16 +2468,16 @@ export default function App() {
               <div className="border-t border-dashed border-gray-300 pt-1.5 space-y-0.5">
                 <div className="flex justify-between font-bold text-sm text-[#113F33] pt-0.5">
                   <span>সর্বমোট বিল:</span>
-                  <span>{printPreviewOrder.total} ৳</span>
+                  <span>{printPreviewOrder.total}</span>
                 </div>
                 <div className="flex justify-between font-bold text-emerald-700">
                   <span>নগদ জমা:</span>
-                  <span>{printPreviewOrder.paid} ৳</span>
+                  <span>{printPreviewOrder.paid}</span>
                 </div>
                 {printPreviewOrder.due > 0 && (
                   <div className="flex justify-between font-bold text-red-600">
                     <span>বাকি:</span>
-                    <span>{printPreviewOrder.due} ৳</span>
+                    <span>{printPreviewOrder.due}</span>
                   </div>
                 )}
               </div>
@@ -2433,9 +2513,9 @@ export default function App() {
             <h3 className="font-bold text-base text-gray-900">বিক্রি সফলভাবে শিটে সেভ হয়েছে!</h3>
             <p className="text-xs text-gray-500">ইনভয়েস নম্বর: {successModal.invoiceNo}</p>
             <div className="bg-gray-50 p-2.5 rounded-xl text-xs space-y-1">
-              <div className="flex justify-between"><span>মোট বিল:</span><span className="font-bold">{successModal.total} ৳</span></div>
-              <div className="flex justify-between text-emerald-700 font-bold"><span>জমা:</span><span>{successModal.paid} ৳</span></div>
-              {successModal.due > 0 && <div className="flex justify-between text-red-600 font-bold"><span>বাকি:</span><span>{successModal.due} ৳</span></div>}
+              <div className="flex justify-between"><span>মোট বিল:</span><span className="font-bold">{successModal.total}</span></div>
+              <div className="flex justify-between text-emerald-700 font-bold"><span>জমা:</span><span>{successModal.paid}</span></div>
+              {successModal.due > 0 && <div className="flex justify-between text-red-600 font-bold"><span>বাকি:</span><span>{successModal.due}</span></div>}
             </div>
             <button onClick={() => setSuccessModal(null)} className="w-full py-2.5 rounded-xl bg-[#1B7A5E] text-white font-bold text-xs shadow hover:bg-[#113F33]">ঠিক আছে</button>
           </div>
@@ -2451,33 +2531,177 @@ export default function App() {
               <button onClick={() => { setIsCategoryModalOpen(false); handleSync(); }} className="text-gray-400 hover:text-gray-600"><X className="w-4 h-4" /></button>
             </div>
             
+            {/* Category Management */}
             <div className="space-y-1.5">
               <label className="text-[10px] font-bold text-gray-700">ক্যাটাগরি যোগ করুন</label>
               <div className="flex gap-2">
-                <input type="text" value={newCatInput} onChange={(e) => setNewCatInput(e.target.value)} placeholder="নতুন ক্যাটাগরি..." className="flex-1 px-2.5 py-1.5 bg-gray-50 border border-gray-200 rounded-xl text-xs" />
-                <button onClick={() => { if(newCatInput && !categoriesList.includes(newCatInput)) { const updated = [...categoriesList, newCatInput.trim()]; setCategoriesList(updated); setNewCatInput(''); handleSync(orders, products, customers, updated, unitsList, payments, repTransactions); } }} className="px-3 py-1.5 bg-[#1B7A5E] text-white rounded-xl text-xs font-bold">যোগ</button>
+                <input 
+                  type="text" 
+                  value={newCatInput} 
+                  onChange={(e) => setNewCatInput(e.target.value)} 
+                  placeholder="নতুন ক্যাটাগরি..." 
+                  className="flex-1 px-2.5 py-1.5 bg-gray-50 border border-gray-200 rounded-xl text-xs" 
+                />
+                <button 
+                  onClick={() => { 
+                    if (newCatInput.trim() && !categoriesList.includes(newCatInput.trim())) { 
+                      const updated = [...categoriesList, newCatInput.trim()]; 
+                      setCategoriesList(updated); 
+                      setNewCatInput(''); 
+                      handleSync(orders, products, customers, updated, unitsList, payments, repTransactions); 
+                      showToast(`ক্যাটাগরি "${newCatInput.trim()}" যোগ হয়েছে!`, 'success');
+                    } 
+                  }} 
+                  className="px-3 py-1.5 bg-[#1B7A5E] text-white rounded-xl text-xs font-bold"
+                >
+                  যোগ
+                </button>
               </div>
-              <div className="flex flex-wrap gap-1 max-h-20 overflow-y-auto">
+
+              {/* Edit Category Inline */}
+              {editingCategory && (
+                <div className="p-2 bg-emerald-50 rounded-xl border border-emerald-200 space-y-1.5">
+                  <div className="text-[10px] font-bold text-emerald-900">ক্যাটাগরি এডিট করুন ({editingCategory.original}):</div>
+                  <div className="flex gap-1.5">
+                    <input 
+                      type="text" 
+                      value={editingCategory.current} 
+                      onChange={(e) => setEditingCategory({ ...editingCategory, current: e.target.value })} 
+                      className="flex-1 px-2 py-1 bg-white border border-emerald-300 rounded-lg text-xs" 
+                    />
+                    <button 
+                      onClick={() => {
+                        const newName = editingCategory.current.trim();
+                        if (newName && newName !== editingCategory.original) {
+                          const updatedCats = categoriesList.map(c => c === editingCategory.original ? newName : c);
+                          setCategoriesList(updatedCats);
+                          const updatedProds = products.map(p => p.category === editingCategory.original ? { ...p, category: newName } : p);
+                          setProducts(updatedProds);
+                          handleSync(orders, updatedProds, customers, updatedCats, unitsList, payments, repTransactions);
+                          showToast(`ক্যাটাগরি "${editingCategory.original}" আপডেট করে "${newName}" করা হয়েছে!`, 'success');
+                        }
+                        setEditingCategory(null);
+                      }}
+                      className="px-2.5 py-1 bg-[#1B7A5E] text-white rounded-lg text-xs font-bold"
+                    >
+                      আপডেট
+                    </button>
+                    <button onClick={() => setEditingCategory(null)} className="px-2 py-1 bg-gray-200 text-gray-700 rounded-lg text-xs">বাতিল</button>
+                  </div>
+                </div>
+              )}
+
+              <div className="flex flex-wrap gap-1.5 max-h-24 overflow-y-auto pt-1">
                 {categoriesList.map(cat => (
-                  <span key={cat} className="flex items-center gap-1 px-2 py-1 bg-emerald-50 text-emerald-800 rounded-lg text-[10px] font-medium">
-                    {cat}
-                    <button onClick={() => { const updated = categoriesList.filter(c => c !== cat); setCategoriesList(updated); handleSync(orders, products, customers, updated, unitsList, payments, repTransactions); }} className="text-red-500 hover:text-red-700"><Trash2 className="w-3 h-3" /></button>
+                  <span key={cat} className="flex items-center gap-1.5 px-2 py-1 bg-emerald-50 text-emerald-800 rounded-lg text-[10px] font-medium border border-emerald-100">
+                    <span>{cat}</span>
+                    <button 
+                      onClick={() => setEditingCategory({ original: cat, current: cat })} 
+                      className="text-gray-400 hover:text-emerald-700 p-0.5" 
+                      title="এডিট / আপডেট"
+                    >
+                      <Pencil className="w-2.5 h-2.5" />
+                    </button>
+                    <button 
+                      onClick={() => { 
+                        const updated = categoriesList.filter(c => c !== cat); 
+                        setCategoriesList(updated); 
+                        handleSync(orders, products, customers, updated, unitsList, payments, repTransactions); 
+                        showToast(`ক্যাটাগরি "${cat}" শিট থেকে মুছে ফেলা হয়েছে`, 'info');
+                      }} 
+                      className="text-red-400 hover:text-red-600 p-0.5" 
+                      title="মুছে ফেলুন"
+                    >
+                      <Trash2 className="w-2.5 h-2.5" />
+                    </button>
                   </span>
                 ))}
               </div>
             </div>
             
+            {/* Unit Management */}
             <div className="space-y-1.5 pt-2 border-t border-gray-100">
-              <label className="text-[10px] font-bold text-gray-700">একক যোগ করুন</label>
+              <label className="text-[10px] font-bold text-gray-700">একক (Unit) যোগ করুন</label>
               <div className="flex gap-2">
-                <input type="text" value={newUnitInput} onChange={(e) => setNewUnitInput(e.target.value)} placeholder="নতুন একক..." className="flex-1 px-2.5 py-1.5 bg-gray-50 border border-gray-200 rounded-xl text-xs" />
-                <button onClick={() => { if(newUnitInput && !unitsList.includes(newUnitInput)) { const updated = [...unitsList, newUnitInput.trim()]; setUnitsList(updated); setNewUnitInput(''); handleSync(orders, products, customers, categoriesList, updated, payments, repTransactions); } }} className="px-3 py-1.5 bg-[#1B7A5E] text-white rounded-xl text-xs font-bold">যোগ</button>
+                <input 
+                  type="text" 
+                  value={newUnitInput} 
+                  onChange={(e) => setNewUnitInput(e.target.value)} 
+                  placeholder="নতুন একক..." 
+                  className="flex-1 px-2.5 py-1.5 bg-gray-50 border border-gray-200 rounded-xl text-xs" 
+                />
+                <button 
+                  onClick={() => { 
+                    if (newUnitInput.trim() && !unitsList.includes(newUnitInput.trim())) { 
+                      const updated = [...unitsList, newUnitInput.trim()]; 
+                      setUnitsList(updated); 
+                      setNewUnitInput(''); 
+                      handleSync(orders, products, customers, categoriesList, updated, payments, repTransactions); 
+                      showToast(`একক "${newUnitInput.trim()}" যোগ হয়েছে!`, 'success');
+                    } 
+                  }} 
+                  className="px-3 py-1.5 bg-[#1B7A5E] text-white rounded-xl text-xs font-bold"
+                >
+                  যোগ
+                </button>
               </div>
-              <div className="flex flex-wrap gap-1 max-h-20 overflow-y-auto">
+
+              {/* Edit Unit Inline */}
+              {editingUnit && (
+                <div className="p-2 bg-blue-50 rounded-xl border border-blue-200 space-y-1.5">
+                  <div className="text-[10px] font-bold text-blue-900">একক এডিট / আপডেট করুন ({editingUnit.original}):</div>
+                  <div className="flex gap-1.5">
+                    <input 
+                      type="text" 
+                      value={editingUnit.current} 
+                      onChange={(e) => setEditingUnit({ ...editingUnit, current: e.target.value })} 
+                      className="flex-1 px-2 py-1 bg-white border border-blue-300 rounded-lg text-xs" 
+                    />
+                    <button 
+                      onClick={() => {
+                        const newName = editingUnit.current.trim();
+                        if (newName && newName !== editingUnit.original) {
+                          const updatedUnits = unitsList.map(u => u === editingUnit.original ? newName : u);
+                          setUnitsList(updatedUnits);
+                          const updatedProds = products.map(p => p.unit === editingUnit.original ? { ...p, unit: newName } : p);
+                          setProducts(updatedProds);
+                          handleSync(orders, updatedProds, customers, categoriesList, updatedUnits, payments, repTransactions);
+                          showToast(`একক "${editingUnit.original}" আপডেট করে "${newName}" করা হয়েছে!`, 'success');
+                        }
+                        setEditingUnit(null);
+                      }}
+                      className="px-2.5 py-1 bg-blue-700 text-white rounded-lg text-xs font-bold"
+                    >
+                      আপডেট
+                    </button>
+                    <button onClick={() => setEditingUnit(null)} className="px-2 py-1 bg-gray-200 text-gray-700 rounded-lg text-xs">বাতিল</button>
+                  </div>
+                </div>
+              )}
+
+              <div className="flex flex-wrap gap-1.5 max-h-24 overflow-y-auto pt-1">
                 {unitsList.map(u => (
-                  <span key={u} className="flex items-center gap-1 px-2 py-1 bg-blue-50 text-blue-800 rounded-lg text-[10px] font-medium">
-                    {u}
-                    <button onClick={() => { const updated = unitsList.filter(unit => unit !== u); setUnitsList(updated); handleSync(orders, products, customers, categoriesList, updated, payments, repTransactions); }} className="text-red-500 hover:text-red-700"><Trash2 className="w-3 h-3" /></button>
+                  <span key={u} className="flex items-center gap-1.5 px-2 py-1 bg-blue-50 text-blue-800 rounded-lg text-[10px] font-medium border border-blue-100">
+                    <span>{u}</span>
+                    <button 
+                      onClick={() => setEditingUnit({ original: u, current: u })} 
+                      className="text-gray-400 hover:text-blue-700 p-0.5" 
+                      title="এডিট / আপডেট"
+                    >
+                      <Pencil className="w-2.5 h-2.5" />
+                    </button>
+                    <button 
+                      onClick={() => { 
+                        const updated = unitsList.filter(unit => unit !== u); 
+                        setUnitsList(updated); 
+                        handleSync(orders, products, customers, categoriesList, updated, payments, repTransactions); 
+                        showToast(`একক "${u}" শিট থেকে মুছে ফেলা হয়েছে`, 'info');
+                      }} 
+                      className="text-red-400 hover:text-red-600 p-0.5" 
+                      title="মুছে ফেলুন"
+                    >
+                      <Trash2 className="w-2.5 h-2.5" />
+                    </button>
                   </span>
                 ))}
               </div>

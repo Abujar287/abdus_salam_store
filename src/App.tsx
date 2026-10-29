@@ -822,8 +822,13 @@ export default function App() {
     const sub = cartSubtotal;
     const disc = discountInput;
     const tot = cartTotal;
-    const paidAmt = cashPaidInput !== '' ? Number(cashPaidInput) : (!isExisting && !isNew ? tot : 0);
+    const paidAmt = cashPaidInput !== '' ? Number(cashPaidInput) : tot;
     const dueAmt = Math.max(0, tot - paidAmt);
+
+    if (!isExisting && !isNew && dueAmt > 0) {
+      showToast('নগদ ক্রেতার কোনো বাকি রাখা যাবে না! পুরো টাকা পরিশোধ করতে হবে।', 'error');
+      return;
+    }
 
     const draftOrder: Order = {
       id: `ord-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`,
@@ -1241,6 +1246,12 @@ export default function App() {
     // Check searchTags
     if (product.searchTags && product.searchTags.some(tag => tag.toLowerCase().includes(q))) {
       return true;
+    }
+
+    if (q === 'd' || q === 'ড') {
+      if (nameLower.startsWith('ড') || nameLower.startsWith('দ') || nameLower.startsWith('d') || nameLower.includes('ড') || nameLower.includes('দ') || nameLower.includes('ডাল') || nameLower.includes('ডিম')) {
+        return true;
+      }
     }
 
     // Prefix matching on words

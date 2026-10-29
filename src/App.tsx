@@ -1212,50 +1212,11 @@ export default function App() {
     const nameLower = product.name.toLowerCase();
     const catLower = product.category.toLowerCase();
     
-    // Check direct substring matches
+    // Strict keyword/substring match in name, category, barcode, or searchTags
     if (nameLower.includes(q)) return true;
     if (catLower.includes(q)) return true;
     if (product.barcode && product.barcode.toLowerCase().includes(q)) return true;
-    
-    // Check searchTags
     if (product.searchTags && product.searchTags.some(tag => tag.toLowerCase().includes(q))) {
-      return true;
-    }
-
-    if (q === 'd' || q === 'ড') {
-      if (nameLower.startsWith('ড') || nameLower.startsWith('দ') || nameLower.startsWith('d') || nameLower.includes('ড') || nameLower.includes('দ') || nameLower.includes('ডাল') || nameLower.includes('ডিম')) {
-        return true;
-      }
-    }
-
-    // Prefix matching on words
-    const words = nameLower.split(/\s+/);
-    if (words.some(w => w.startsWith(q))) return true;
-
-    // Common phonetic / prefix mappings for Bengali & English (e.g. d -> ড, dal -> ডাল, tel -> তেল, etc.)
-    const mapEnToBn: { [key: string]: string[] } = {
-      'd': ['ড', 'দ', 'ডাল', 'ডিম', 'ডাব'],
-      'dal': ['ডাল'],
-      'tel': ['তেল'],
-      'ata': ['আটা'],
-      'chini': ['চিনি'],
-      'cha': ['চা'],
-      'dim': ['ডিম'],
-      'alu': ['আলু'],
-      'peyaj': ['পেঁয়াজ', 'পেয়াজ'],
-      'rosun': ['রসুন'],
-      'ada': ['আদা']
-    };
-
-    if (mapEnToBn[q]) {
-      if (mapEnToBn[q].some(bn => nameLower.includes(bn) || catLower.includes(bn))) {
-        return true;
-      }
-    }
-
-    // Character-by-character substring or initial check
-    const qChars = q.split('');
-    if (qChars.every(char => nameLower.includes(char))) {
       return true;
     }
 

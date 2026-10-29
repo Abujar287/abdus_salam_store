@@ -456,11 +456,28 @@ export default function App() {
         if (result.stock && Array.isArray(result.stock)) {
           const fetchedProducts = result.stock.map((p: any) => {
             let tags: string[] = [];
-            const rawTags = p.searchTags || p.searchtags;
+            let rawTags = p['seacrh keyword'] || p['seacrh_keyword'] || p.seacrhKeyword || p.seacrhkeyword || p.searchKeyword || p.searchkeyword || p['search keyword'] || p['search_keyword'] || p.searchTags || p.searchtags || p.search_tags || p.keywords || p.keyword || p['সার্চ কিওয়ার্ড'] || p['সার্চ কিওয়ার্ড'] || p['ট্যাগ'];
+            
+            if (!rawTags && typeof p === 'object' && p !== null) {
+              const keys = Object.keys(p);
+              const matchKey = keys.find(k => {
+                const kLower = k.toLowerCase();
+                return kLower.includes('seacrh') || kLower.includes('search') || kLower.includes('key') || kLower.includes('tag') || kLower.includes('কিওয়ার্ড') || kLower.includes('কীবোর্ড');
+              });
+              if (matchKey) {
+                rawTags = p[matchKey];
+              }
+            }
+
             if (Array.isArray(rawTags)) {
-              tags = rawTags;
-            } else if (typeof rawTags === 'string') {
-              try { tags = JSON.parse(rawTags); } catch { tags = [rawTags]; }
+              tags = rawTags.map((t: any) => String(t).trim()).filter(Boolean);
+            } else if (typeof rawTags === 'string' && rawTags.trim()) {
+              const str = rawTags.trim();
+              if (str.startsWith('[') && str.endsWith(']')) {
+                try { tags = JSON.parse(str); } catch { tags = str.split(/[,;\n|]/).map(t => t.trim()).filter(Boolean); }
+              } else {
+                tags = str.split(/[,;\n|]/).map(t => t.trim()).filter(Boolean);
+              }
             }
             return {
               id: String(p.id || `p-${Date.now()}-${Math.random().toString(36).substr(2, 4)}`).trim(),
@@ -710,19 +727,26 @@ export default function App() {
         action: 'syncData',
         tabs: ['bikri', 'stock', 'bakir khata', 'category', 'units', 'joma', 'protinidhi'],
         bikri: formattedBikri,
-        stock: targetProducts.map(p => ({
-          id: String(p.id || '').trim(),
-          name: String(p.name || '').trim(),
-          category: String(p.category || 'মুদি').trim(),
-          stock: Number(p.stock) || 0,
-          unit: String(p.unit || 'পিস').trim(),
-          buyPrice: Number(p.buyPrice) || 0,
-          sellPrice: Number(p.sellPrice) || 0,
-          barcode: String(p.barcode || '').trim(),
-          repName: String(p.repName || '').trim(),
-          repPhone: String(p.repPhone || '').trim(),
-          datetime: formatDateTime(new Date())
-        })),
+        stock: targetProducts.map(p => {
+          const tagsStr = Array.isArray(p.searchTags) ? p.searchTags.join(', ') : String(p.searchTags || '');
+          return {
+            id: String(p.id || '').trim(),
+            name: String(p.name || '').trim(),
+            category: String(p.category || 'মুদি').trim(),
+            stock: Number(p.stock) || 0,
+            unit: String(p.unit || 'পিস').trim(),
+            buyPrice: Number(p.buyPrice) || 0,
+            sellPrice: Number(p.sellPrice) || 0,
+            barcode: String(p.barcode || '').trim(),
+            repName: String(p.repName || '').trim(),
+            repPhone: String(p.repPhone || '').trim(),
+            'seacrh keyword': tagsStr,
+            'seacrh_keyword': tagsStr,
+            searchKeyword: tagsStr,
+            searchTags: tagsStr,
+            datetime: formatDateTime(new Date())
+          };
+        }),
         'bakir khata': targetCustomers.map(c => ({ ...c, datetime: formatDateTime(new Date()) })),
         category: targetCategories.map(cat => ({ category_name: cat, datetime: formatDateTime(new Date()) })),
         units: targetUnits.map(u => ({ unit_name: u, datetime: formatDateTime(new Date()) })),
@@ -1210,15 +1234,64 @@ export default function App() {
     if (!query.trim()) return true;
     const q = query.toLowerCase().trim();
     const nameLower = product.name.toLowerCase();
-    const catLower = product.category.toLowerCase();
     
-    // Strict keyword/substring match in name, category, barcode, or searchTags
-    if (nameLower.includes(q)) return true;
-    if (catLower.includes(q)) return true;
-    if (product.barcode && product.barcode.toLowerCase().includes(q)) return true;
-    if (product.searchTags && product.searchTags.some(tag => tag.toLowerCase().includes(q))) {
-      return true;
+    // English to Bengali store keyword mappings
+    const keywordMap: { [key: string]: string[] } = {
+      'dal': ['ডাল'],
+      'tel': ['তেল'],
+      'oil': ['তেল'],
+      'chini': ['চিনি'],
+      'sugar': ['চিনি'],
+      'ata': ['আটা'],
+      'maida': ['ময়দা'],
+      'cha': ['চা'],
+      'tea': ['চা'],
+      'dim': ['ডিম'],
+      'egg': ['ডিম'],
+      'alu': ['আলু'],
+      'potato': ['আলু'],
+      'peyaj': ['পেঁয়াজ', 'পেয়াজ'],
+      'onion': ['পেঁয়াজ', 'পেয়াজ'],
+      'rosun': ['রসুন'],
+      'garlic': ['রসুন'],
+      'ada': ['আদা'],
+      'ginger': ['আদা'],
+      'sabun': ['সাবান'],
+      'soap': ['সাবান'],
+      'cal': ['চাল'],
+      'rice': ['চাল']
+    };
+
+    const targetTerms = keywordMap[q] ? keywordMap[q] : [q];
+
+    // 1. Check searchKeyword / searchTags from Google Sheet stock tab
+    if (product.searchTags && Array.isArray(product.searchTags) && product.searchTags.length > 0) {
+      const tagsJoined = product.searchTags.join(' ').toLowerCase();
+      if (tagsJoined.includes(q)) return true;
+      for (const term of targetTerms) {
+        if (tagsJoined.includes(term.toLowerCase())) return true;
+      }
     }
+
+    // 2. Tokenize product name ONLY into distinct words (no category check)
+    const nameWords = nameLower.split(/[\s\-_()]+/);
+
+    // Check if any target term matches a whole word or exact token in product name
+    for (const term of targetTerms) {
+      const isMatch = nameWords.some(w => w === term || (w.includes(term) && term.length > 2));
+      if (isMatch) {
+        // Extra safeguard: if term is 'ডাল', make sure the word isn't part of 'স্যান্ডাল'
+        if (term === 'ডাল') {
+          if (nameWords.some(w => w === 'স্যান্ডাল' || w === 'sandal' || w.includes('স্যান্ডাল'))) {
+            continue;
+          }
+        }
+        return true;
+      }
+    }
+
+    // 3. Check barcode match
+    if (product.barcode && product.barcode.toLowerCase() === q) return true;
 
     return false;
   };
@@ -2400,7 +2473,8 @@ export default function App() {
                   
                   const updatedCustomers: Customer[] = customers.map(c => {
                     if (c.id === depositModalCustomer.id || (depositModalCustomer.invoiceNo && c.invoiceNo === depositModalCustomer.invoiceNo)) {
-                      return { ...c, dueAmount: 0, status: 'clear' };
+                      const newDue = Math.max(0, c.dueAmount - amt);
+                      return { ...c, dueAmount: newDue, status: newDue > 0 ? 'pending' : 'clear' };
                     }
                     return c;
                   });
@@ -2741,7 +2815,7 @@ export default function App() {
             <div className="bg-gray-900 text-emerald-400 p-3 rounded-xl text-[9px] font-mono overflow-y-auto flex-1 select-all space-y-1 border border-gray-700 max-h-[300px]">
               <pre>{`const REQUIRED_SHEETS = {
   'bikri': ['invoice no', 'date', 'customer name', 'customer mobile', 'location', 'product name', 'category', 'cost', 'sales', 'discount', 'baki', 'payment method', 'profit', 'datetime'],
-  'stock': ['id', 'name', 'category', 'stock', 'unit', 'buyPrice', 'sellPrice', 'barcode', 'repName', 'repPhone', 'datetime'],
+  'stock': ['id', 'name', 'category', 'stock', 'unit', 'buyPrice', 'sellPrice', 'barcode', 'repName', 'repPhone', 'searchKeyword', 'datetime'],
   'bakir khata': ['id', 'name', 'phone', 'address', 'dueAmount', 'lastPurchaseDate', 'createdAt', 'status', 'datetime'],
   'category': ['category_name', 'datetime'],
   'units': ['unit_name', 'datetime'],
